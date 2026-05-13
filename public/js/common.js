@@ -11,7 +11,7 @@ async function apiRequest(url, options = {}) {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
     },
-    credentials: 'same-origin', // 确保发送cookie
+    credentials: 'include', // 跨域+HTTPS环境发送cookie
     ...options
   };
   
