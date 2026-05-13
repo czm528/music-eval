@@ -522,18 +522,162 @@ async function loadQuestionWordcloud(questionId) {
   try {
     const res = await apiRequest(`/api/teacher/questions/${questionId}/wordcloud`);
     
-    if (!res.success || !res.data || res.data.length === 0) {
-      container.innerHTML = '<p class="empty-state">暂无足够的回答数据生成词云</p>';
+    if (!res.success) {
+      container.innerHTML = '<p class="empty-state">加载词云失败</p>';
       return;
     }
     
-    // 使用 ECharts 渲染词云
-    renderEChartsWordcloud(container, res.data);
+    const data = res.data || {};
+    const strengths = data.strengths || [];
+    const weaknesses = data.weaknesses || [];
+    const dimensionOverview = data.dimensionOverview || [];
+    
+    // 如果两类都没有数据，显示提示
+    if (strengths.length === 0 && weaknesses.length === 0) {
+      container.innerHTML = '<p class="empty-state">暂无足够的评价数据生成词云</p>';
+      return;
+    }
+    
+    // 使用 ECharts 渲染双词云
+    renderDualWordcloud(container, strengths, weaknesses, dimensionOverview);
     
   } catch (error) {
     console.error('加载词云数据错误:', error);
     container.innerHTML = '<p class="empty-state">加载词云失败</p>';
   }
+}
+
+// 渲染双词云（优势 + 不足）
+function renderDualWordcloud(container, strengths, weaknesses, dimensionOverview) {
+  const timestamp = Date.now();
+  const strengthsId = 'wordcloud-strengths-' + timestamp;
+  const weaknessesId = 'wordcloud-weaknesses-' + timestamp;
+  
+  // 构建HTML结构
+  let html = `
+    <div class="wordcloud-grid">
+      <div class="wordcloud-half">
+        <div class="wordcloud-label strengths-label">✅ 优势方面</div>
+        <p class="wordcloud-desc">学生表现较好的关键词</p>
+        <div class="wordcloud-chart" id="${strengthsId}">
+          <p class="wordcloud-empty">暂无数据</p>
+        </div>
+      </div>
+      <div class="wordcloud-half">
+        <div class="wordcloud-label weaknesses-label">⚠️ 不足方面</div>
+        <p class="wordcloud-desc">学生需要加强的关键词</p>
+        <div class="wordcloud-chart" id="${weaknessesId}">
+          <p class="wordcloud-empty">暂无数据</p>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  // 添加维度概览条
+  if (dimensionOverview && dimensionOverview.length > 0) {
+    html += `
+      <div class="dimension-overview">
+        <div class="dimension-overview-title">📊 各维度平均得分</div>
+        <div class="dimension-overview-bars">
+          ${dimensionOverview.map(dim => {
+            const statusIcon = dim.status === 'strength' ? '✅' : (dim.status === 'weakness' ? '⚠️' : '➖');
+            const statusClass = dim.status === 'strength' ? 'status-good' : (dim.status === 'weakness' ? 'status-warning' : 'status-neutral');
+            const barWidth = Math.min(dim.average * 10, 100);
+            const barColor = dim.status === 'strength' ? '#22c55e' : (dim.status === 'weakness' ? '#ef4444' : '#f59e0b');
+            
+            return `
+              <div class="dimension-item">
+                <div class="dimension-info">
+                  <span class="dimension-name">${dim.name}</span>
+                  <span class="dimension-score ${statusClass}">${dim.average} ${statusIcon}</span>
+                </div>
+                <div class="dimension-bar-bg">
+                  <div class="dimension-bar-fill" style="width: ${barWidth}%; background: ${barColor}"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+  
+  container.innerHTML = html;
+  
+  // 渲染优势词云
+  if (strengths.length > 0) {
+    const strengthsContainer = document.getElementById(strengthsId);
+    renderSingleWordcloud(strengthsContainer, strengths, 'strengths');
+  }
+  
+  // 渲染不足词云
+  if (weaknesses.length > 0) {
+    const weaknessesContainer = document.getElementById(weaknessesId);
+    renderSingleWordcloud(weaknessesContainer, weaknesses, 'weaknesses');
+  }
+}
+
+// 渲染单个词云
+function renderSingleWordcloud(container, words, type) {
+  // 绿色系配色 - 优势
+  const strengthColors = ['#22c55e', '#10b981', '#059669', '#34d399', '#6ee7b7', '#a7f3d0'];
+  // 橙红色系配色 - 不足
+  const weaknessColors = ['#f59e0b', '#ef4444', '#f97316', '#dc2626', '#fb923c', '#fca5a5'];
+  
+  const colors = type === 'strengths' ? strengthColors : weaknessColors;
+  
+  const chartId = 'wordcloud-chart-' + type + '-' + Date.now();
+  container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 350px;"></div>`;
+  
+  const chart = echarts.init(document.getElementById(chartId));
+  
+  // 格式化数据
+  const wordCloudData = words.map((item, idx) => ({
+    name: item.name,
+    value: item.value,
+    itemStyle: {
+      color: colors[idx % colors.length]
+    }
+  }));
+  
+  const option = {
+    backgroundColor: 'transparent',
+    tooltip: {
+      show: true,
+      formatter: function(params) {
+        return `${params.name}: ${params.value}次`;
+      }
+    },
+    series: [{
+      type: 'wordCloud',
+      shape: 'circle',
+      left: 'center',
+      top: 'center',
+      width: '90%',
+      height: '90%',
+      sizeRange: [12, 48],
+      rotationRange: [-30, 30],
+      rotationStep: 15,
+      gridSize: 8,
+      drawOutOfBound: false,
+      textStyle: {
+        fontFamily: 'sans-serif',
+        fontWeight: 'bold',
+        color: function() {
+          return colors[Math.floor(Math.random() * colors.length)];
+        }
+      },
+      emphasis: {
+        textStyle: {
+          shadowBlur: 10,
+          shadowColor: '#333'
+        }
+      },
+      data: wordCloudData
+    }]
+  };
+  
+  chart.setOption(option);
 }
 
 // 使用 ECharts 渲染词云

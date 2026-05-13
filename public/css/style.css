@@ -1975,6 +1975,152 @@ textarea {
   padding: var(--space-xl);
 }
 
+/* ============ 双词云布局 ============ */
+.wordcloud-grid {
+  display: flex;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.wordcloud-half {
+  flex: 1;
+  min-width: 0;
+}
+
+.wordcloud-label {
+  font-size: 15px;
+  font-weight: 600;
+  padding: var(--space-sm) var(--space);
+  border-radius: var(--radius);
+  display: inline-block;
+  margin-bottom: var(--space-sm);
+}
+
+.strengths-label {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  color: #15803d;
+  border: 1px solid #86efac;
+}
+
+.weaknesses-label {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
+.wordcloud-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-sm);
+}
+
+.wordcloud-chart {
+  min-height: 350px;
+  background: var(--bg-light);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wordcloud-empty {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ============ 维度概览条 ============ */
+.dimension-overview {
+  background: var(--bg-light);
+  border-radius: var(--radius);
+  padding: var(--space-lg);
+  margin-top: var(--space);
+}
+
+.dimension-overview-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space);
+}
+
+.dimension-overview-bars {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-lg);
+}
+
+.dimension-item {
+  flex: 1;
+  min-width: 150px;
+}
+
+.dimension-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+}
+
+.dimension-name {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.dimension-score {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.dimension-score.status-good {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.dimension-score.status-warning {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.dimension-score.status-neutral {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.dimension-bar-bg {
+  height: 6px;
+  background: var(--border-color);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.dimension-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* ============ 响应式布局 ============ */
+@media (max-width: 768px) {
+  .wordcloud-grid {
+    flex-direction: column;
+  }
+  
+  .wordcloud-chart {
+    min-height: 280px;
+  }
+  
+  .dimension-overview-bars {
+    flex-direction: column;
+    gap: var(--space);
+  }
+  
+  .dimension-item {
+    min-width: 100%;
+  }
+}
+
 /* ============ 分数等级颜色 ============ */
 .score-badge.excellent {
   background: #22c55e;

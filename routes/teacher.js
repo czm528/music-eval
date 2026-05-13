@@ -509,6 +509,15 @@ router.get('/classrooms/:id/stats', (req, res) => {
 
 // ============ 词云分析 ============
 
+// 维度名称映射
+const DIMENSION_NAMES = {
+  perception: '音乐感知力',
+  emotion: '情感理解力',
+  culture: '文化认知',
+  aesthetic: '审美判断',
+  expression: '表达规范'
+};
+
 // 中文停用词列表
 const STOP_WORDS = new Set([
   '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '一个', '上', '也', '很', '到', '说', '要', '去',
@@ -557,7 +566,7 @@ function extractKeywords(texts, topN = 50) {
   return filtered.map(([name, value]) => ({ name, value }));
 }
 
-// 获取问题的词云数据
+// 获取问题的词云数据 - 区分优势与不足
 router.get('/questions/:id/wordcloud', (req, res) => {
   const { id } = req.params;
   const db = getDatabase();
@@ -565,19 +574,124 @@ router.get('/questions/:id/wordcloud', (req, res) => {
   try {
     // 获取该问题的所有回答
     const answers = db.prepare(`
-      SELECT content FROM answers
+      SELECT content, evaluation FROM answers
       WHERE question_id = ?
     `).all(id);
     
     if (!answers || answers.length === 0) {
-      return res.json({ success: true, data: [] });
+      return res.json({ 
+        success: true, 
+        data: { 
+          strengths: [], 
+          weaknesses: [],
+          dimensionOverview: []
+        } 
+      });
     }
     
-    // 提取关键词
-    const texts = answers.map(a => a.content);
-    const keywords = extractKeywords(texts, 50);
+    // 统计关键词频次
+    const strengthWords = {};
+    const weaknessWords = {};
     
-    res.json({ success: true, data: keywords });
+    // 统计各维度得分
+    const dimensionScores = {
+      perception: [],
+      emotion: [],
+      culture: [],
+      aesthetic: [],
+      expression: []
+    };
+    
+    // 解析每条回答的 evaluation
+    answers.forEach(answer => {
+      try {
+        // 优先从 evaluation 提取关键词
+        if (answer.evaluation) {
+          const evaluation = typeof answer.evaluation === 'string' 
+            ? JSON.parse(answer.evaluation) 
+            : answer.evaluation;
+          
+          if (evaluation && evaluation.dimensionDetails) {
+            Object.entries(evaluation.dimensionDetails).forEach(([dimKey, dimData]) => {
+              // 统计维度得分
+              if (dimData.dimensionScore !== undefined) {
+                dimensionScores[dimKey] = dimensionScores[dimKey] || [];
+                dimensionScores[dimKey].push(dimData.dimensionScore);
+              }
+              
+              // 分类关键词
+              if (dimData.matchedKeywords && Array.isArray(dimData.matchedKeywords)) {
+                const score = dimData.dimensionScore || 0;
+                
+                if (score >= 6) {
+                  // 优势：得分 >= 6
+                  dimData.matchedKeywords.forEach(kw => {
+                    strengthWords[kw] = (strengthWords[kw] || 0) + 1;
+                  });
+                } else if (score < 4) {
+                  // 不足：得分 < 4
+                  dimData.matchedKeywords.forEach(kw => {
+                    weaknessWords[kw] = (weaknessWords[kw] || 0) + 1;
+                  });
+                }
+              }
+            });
+          }
+        }
+      } catch (e) {
+        // 解析 evaluation 失败，忽略该条
+        console.log('解析evaluation失败:', e.message);
+      }
+    });
+    
+    // 计算维度平均分
+    const dimensionOverview = Object.entries(dimensionScores)
+      .filter(([key, scores]) => scores && scores.length > 0)
+      .map(([key, scores]) => {
+        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+        return {
+          key,
+          name: DIMENSION_NAMES[key] || key,
+          average: Math.round(avg * 10) / 10,
+          status: avg >= 6 ? 'strength' : (avg < 4 ? 'weakness' : 'neutral')
+        };
+      });
+    
+    // 转换为词云数据格式
+    const strengths = Object.entries(strengthWords)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50)
+      .map(([name, value]) => ({ name, value }));
+    
+    const weaknesses = Object.entries(weaknessWords)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 50)
+      .map(([name, value]) => ({ name, value }));
+    
+    // 如果两类都没有数据，fallback 到从回答内容提取关键词
+    if (strengths.length === 0 && weaknesses.length === 0) {
+      const texts = answers.map(a => a.content);
+      const keywords = extractKeywords(texts, 50);
+      
+      // 将提取的关键词按分数高低分配
+      return res.json({ 
+        success: true, 
+        data: { 
+          strengths: keywords.slice(0, 25),
+          weaknesses: [],
+          dimensionOverview
+        } 
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        strengths, 
+        weaknesses,
+        dimensionOverview
+      } 
+    });
   } catch (error) {
     console.error('获取词云数据错误:', error);
     res.json({ success: false, message: '获取失败' });
