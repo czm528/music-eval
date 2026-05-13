@@ -202,7 +202,7 @@ router.delete('/classrooms/:id', (req, res) => {
 
 // 发布新问题
 router.post('/questions', (req, res) => {
-  const { classroomId, content, dimension } = req.body;
+  const { classroomId, content, dimensions } = req.body;
   const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
@@ -217,8 +217,13 @@ router.post('/questions', (req, res) => {
       return res.json({ success: false, message: '课堂已结束，无法发布问题' });
     }
     
-    const result = db.prepare('INSERT INTO questions (classroom_id, content, dimension) VALUES (?, ?, ?)').run(
-      classroomId, content, dimension || null
+    // 至少选择一个维度
+    if (!dimensions || dimensions.length === 0) {
+      return res.json({ success: false, message: '请至少选择一个评分维度' });
+    }
+    
+    const result = db.prepare('INSERT INTO questions (classroom_id, content, dimensions) VALUES (?, ?, ?)').run(
+      classroomId, content, JSON.stringify(dimensions)
     );
     
     // 通过Socket.io广播新问题
@@ -227,7 +232,7 @@ router.post('/questions', (req, res) => {
       io.to(`classroom:${classroomId}`).emit('new-question', {
         questionId: result.lastInsertRowid,
         content,
-        dimension,
+        dimensions,
         createdAt: new Date().toISOString()
       });
     }
@@ -317,32 +322,134 @@ router.get('/classrooms/:id/stats', (req, res) => {
       ORDER BY q.created_at DESC
     `).all(id);
     
-    // 获取维度平均分
+    // 获取维度平均分（只计算选中维度的得分）
     const allAnswers = db.prepare(`
-      SELECT dimensions FROM answers 
-      WHERE question_id IN (SELECT id FROM questions WHERE classroom_id = ?)
+      SELECT a.dimensions, a.total_score, q.dimensions as question_dimensions
+      FROM answers a
+      JOIN questions q ON a.question_id = q.id
+      WHERE q.classroom_id = ?
     `).all(id);
     
     const dimensionTotals = { perception: 0, emotion: 0, culture: 0, aesthetic: 0, expression: 0 };
-    let dimensionCount = 0;
+    const dimensionCounts = { perception: 0, emotion: 0, culture: 0, aesthetic: 0, expression: 0 };
     
     allAnswers.forEach(a => {
       try {
         const dims = JSON.parse(a.dimensions);
-        for (const key in dimensionTotals) {
+        const questionDims = a.question_dimensions ? JSON.parse(a.question_dimensions) : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+        for (const key of questionDims) {
           if (dims[key] !== undefined) {
             dimensionTotals[key] += dims[key];
+            dimensionCounts[key]++;
           }
         }
-        dimensionCount++;
       } catch (e) {}
     });
     
     const dimensionAvgs = {};
-    if (dimensionCount > 0) {
-      for (const key in dimensionTotals) {
-        dimensionAvgs[key] = Math.round((dimensionTotals[key] / dimensionCount) * 10) / 10;
+    for (const key in dimensionTotals) {
+      if (dimensionCounts[key] > 0) {
+        dimensionAvgs[key] = Math.round((dimensionTotals[key] / dimensionCounts[key]) * 10) / 10;
+      } else {
+        dimensionAvgs[key] = 0;
       }
+    }
+    
+    // 计算每个学生的课堂总评（100分制）
+    // 获取所有学生及其回答
+    const students = db.prepare(`
+      SELECT s.* FROM students s
+      JOIN classroom_students cs ON s.id = cs.student_id
+      WHERE cs.classroom_id = ?
+    `).all(id);
+    
+    const studentTotalScores = [];
+    const questionCount = questions.length;
+    
+    if (questionCount > 0) {
+      // 获取每个学生的所有回答
+      const studentAnswers = db.prepare(`
+        SELECT a.*, q.dimensions as question_dimensions
+        FROM answers a
+        JOIN questions q ON a.question_id = q.id
+        WHERE q.classroom_id = ?
+        ORDER BY a.student_id, a.question_id
+      `).all(id);
+      
+      // 按学生分组
+      const answersByStudent = {};
+      studentAnswers.forEach(a => {
+        if (!answersByStudent[a.student_id]) {
+          answersByStudent[a.student_id] = [];
+        }
+        answersByStudent[a.student_id].push(a);
+      });
+      
+      // 计算每个学生的课堂总评
+      for (const student of students) {
+        const answers = answersByStudent[student.id] || [];
+        if (answers.length === 0) {
+          studentTotalScores.push({
+            studentId: student.id,
+            studentName: student.name,
+            studentNumber: student.student_number,
+            totalScore: 0,
+            questionCount: 0
+          });
+          continue;
+        }
+        
+        // 每道题的归一化得分之和
+        let normalizedSum = 0;
+        let validAnswerCount = 0;
+        
+        for (const answer of answers) {
+          try {
+            const dims = JSON.parse(answer.dimensions);
+            const questionDims = answer.question_dimensions ? JSON.parse(answer.question_dimensions) : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+            
+            // 计算该题选中维度的平均分（10分制）
+            let dimSum = 0;
+            let dimCount = 0;
+            for (const dim of questionDims) {
+              if (dims[dim] !== undefined) {
+                dimSum += dims[dim];
+                dimCount++;
+              }
+            }
+            
+            if (dimCount > 0) {
+              const normalizedScore = (dimSum / dimCount); // 直接是10分制
+              normalizedSum += normalizedScore;
+              validAnswerCount++;
+            }
+          } catch (e) {}
+        }
+        
+        // 课堂总评 = 归一化得分的平均 * 10 = 100分制
+        const totalScore = validAnswerCount > 0 
+          ? Math.round((normalizedSum / validAnswerCount) * 10) 
+          : 0;
+        
+        studentTotalScores.push({
+          studentId: student.id,
+          studentName: student.name,
+          studentNumber: student.student_number,
+          totalScore,
+          questionCount: validAnswerCount
+        });
+      }
+    } else {
+      // 没有问题时，课堂总评为0
+      students.forEach(student => {
+        studentTotalScores.push({
+          studentId: student.id,
+          studentName: student.name,
+          studentNumber: student.student_number,
+          totalScore: 0,
+          questionCount: 0
+        });
+      });
     }
     
     // 获取所有回答（用于生成词云）
@@ -358,7 +465,8 @@ router.get('/classrooms/:id/stats', (req, res) => {
         studentCount,
         questions,
         dimensionAvgs,
-        answerTexts: allAnswerTexts.map(a => a.content)
+        answerTexts: allAnswerTexts.map(a => a.content),
+        studentTotalScores // 每个学生的课堂总评（100分制）
       }
     });
   } catch (error) {

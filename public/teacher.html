@@ -90,15 +90,32 @@
           <h3>发布问题</h3>
           <div class="question-form">
             <textarea id="question-content" placeholder="请输入音乐鉴赏问题，例如：&#10;请描述这段音乐的速度、力度和情感特点"></textarea>
+            <div class="dimension-selector">
+              <label class="dimension-label">选择评分维度：</label>
+              <div class="dimension-checkboxes">
+                <label class="dimension-checkbox">
+                  <input type="checkbox" name="dimensions" value="perception" checked>
+                  <span>音乐感知力</span>
+                </label>
+                <label class="dimension-checkbox">
+                  <input type="checkbox" name="dimensions" value="emotion" checked>
+                  <span>情感理解力</span>
+                </label>
+                <label class="dimension-checkbox">
+                  <input type="checkbox" name="dimensions" value="culture" checked>
+                  <span>文化认知</span>
+                </label>
+                <label class="dimension-checkbox">
+                  <input type="checkbox" name="dimensions" value="aesthetic" checked>
+                  <span>审美判断</span>
+                </label>
+                <label class="dimension-checkbox">
+                  <input type="checkbox" name="dimensions" value="expression" checked>
+                  <span>表达规范</span>
+                </label>
+              </div>
+            </div>
             <div class="form-actions">
-              <select id="question-dimension" class="form-select">
-                <option value="">不指定维度</option>
-                <option value="perception">音乐感知力</option>
-                <option value="emotion">情感理解力</option>
-                <option value="culture">文化认知</option>
-                <option value="aesthetic">审美判断</option>
-                <option value="expression">表达规范</option>
-              </select>
               <button class="btn btn-primary" onclick="publishQuestion()">发布问题</button>
             </div>
           </div>

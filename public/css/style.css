@@ -1887,3 +1887,116 @@ textarea {
   max-height: 400px;
   overflow-y: auto;
 }
+
+
+/* ============ 维度选择器 ============ */
+.dimension-selector {
+  margin: var(--space) 0;
+  padding: var(--space);
+  background: var(--bg-light);
+  border-radius: var(--radius);
+}
+
+.dimension-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.dimension-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space);
+}
+
+.dimension-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 6px 12px;
+  background: var(--bg-white);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  transition: all 0.2s;
+}
+
+.dimension-checkbox:hover {
+  border-color: var(--primary-color);
+}
+
+.dimension-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+}
+
+.dimension-checkbox span {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* ============ 学生课堂总评区域 ============ */
+.student-total-scores {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.student-total-scores h3 {
+  margin-bottom: var(--space);
+  font-size: 15px;
+  color: var(--primary-color);
+}
+
+.total-scores-table {
+  overflow-x: auto;
+}
+
+.total-scores-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.total-scores-table th,
+.total-scores-table td {
+  padding: var(--space-sm) var(--space);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.total-scores-table th {
+  background: var(--bg-light);
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.total-scores-table tr:hover {
+  background: var(--bg-light);
+}
+
+.total-scores-table .score-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  color: white;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: center;
+}
+
+/* ============ 问题卡片维度标签 ============ */
+.dimension-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: var(--primary-bg);
+  color: var(--primary-color);
+  border-radius: var(--radius-sm);
+  margin-right: var(--space-sm);
+}

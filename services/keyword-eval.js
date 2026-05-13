@@ -9,11 +9,12 @@ const { evaluateWithKeywords } = require('../db/music-keywords');
  * 评价回答
  * @param {string} question - 问题内容
  * @param {string} answer - 学生回答
+ * @param {Array} dimensions - 选中的维度数组
  * @returns {Object} 评价结果
  */
-function evaluate(question, answer) {
+function evaluate(question, answer, dimensions = null) {
   // 直接使用关键词库进行评分
-  const result = evaluateWithKeywords(answer, { content: question });
+  const result = evaluateWithKeywords(answer, { content: question }, dimensions);
   
   // 确保结果格式与AI评价一致
   result.highlights = [];
@@ -34,8 +35,9 @@ function evaluate(question, answer) {
   }
   
   // 找出亮点
+  const selectedDimensions = dimensions || ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
   for (const [dimension, score] of Object.entries(result.dimensions)) {
-    if (score >= 6) {
+    if (selectedDimensions.includes(dimension) && score >= 6) {
       const dimensionNames = {
         perception: '音乐感知力',
         emotion: '情感理解力',

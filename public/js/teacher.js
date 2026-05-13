@@ -184,16 +184,30 @@ function renderQuestions() {
     return;
   }
   
-  historyContainer.innerHTML = historyQuestions.map(q => `
+  historyContainer.innerHTML = historyQuestions.map(q => {
+    // 解析维度信息
+    let dimsText = '全部维度';
+    try {
+      if (q.dimensions) {
+        const dims = typeof q.dimensions === 'string' ? JSON.parse(q.dimensions) : q.dimensions;
+        if (Array.isArray(dims) && dims.length > 0) {
+          dimsText = dims.map(d => dimensionNames[d] || d).join('、');
+        }
+      }
+    } catch (e) {}
+    
+    return `
     <div class="question-card">
       <div class="question-content">${q.content}</div>
       <div class="question-meta">
+        <span class="dimension-tag">${dimsText}</span>
+        <span class="separator">|</span>
         <span>${q.answer_count || 0} 人回答</span>
         <span class="separator">|</span>
         <span>平均 ${q.avg_score ? q.avg_score.toFixed(1) : 0} 分</span>
       </div>
     </div>
-  `).join('');
+  `}).join('');
 }
 
 // 发布问题
@@ -209,10 +223,18 @@ async function publishQuestion() {
   }
   
   const content = document.getElementById('question-content').value.trim();
-  const dimension = document.getElementById('question-dimension').value;
+  
+  // 获取选中的维度
+  const dimensionCheckboxes = document.querySelectorAll('input[name="dimensions"]:checked');
+  const dimensions = Array.from(dimensionCheckboxes).map(cb => cb.value);
   
   if (!content) {
     showToast('请输入问题内容');
+    return;
+  }
+  
+  if (dimensions.length === 0) {
+    showToast('请至少选择一个评分维度');
     return;
   }
   
@@ -226,7 +248,7 @@ async function publishQuestion() {
       body: {
         classroomId: currentClassroom.id,
         content: content,
-        dimension: dimension || null
+        dimensions: dimensions
       }
     });
     
@@ -236,7 +258,8 @@ async function publishQuestion() {
     if (res.success) {
       showToast('问题已发布');
       document.getElementById('question-content').value = '';
-      document.getElementById('question-dimension').value = '';
+      // 重置复选框为全选
+      document.querySelectorAll('input[name="dimensions"]').forEach(cb => cb.checked = true);
       
       // 刷新课堂数据
       selectClassroom(currentClassroom.id);
@@ -268,12 +291,72 @@ async function loadClassroomStats() {
     // 渲染得分分布
     renderDistributionChart(data.questions);
     
+    // 渲染学生课堂总评列表
+    renderStudentTotalScores(data.studentTotalScores);
+    
     // 更新回答详情
     loadAnswerList();
     
   } catch (error) {
     console.error('加载统计数据错误:', error);
   }
+}
+
+// 渲染学生课堂总评列表
+function renderStudentTotalScores(studentTotalScores) {
+  // 查找或创建总评区域
+  let container = document.getElementById('student-total-scores');
+  if (!container) {
+    // 在评价图表之前插入总评区域
+    const chartsSection = document.querySelector('.charts-section');
+    if (!chartsSection) return;
+    
+    container = document.createElement('div');
+    container.id = 'student-total-scores';
+    container.className = 'student-total-scores';
+    container.innerHTML = `
+      <h3>学生课堂总评（100分制）</h3>
+      <div class="total-scores-table">
+        <table>
+          <thead>
+            <tr>
+              <th>学号</th>
+              <th>姓名</th>
+              <th>总评得分</th>
+              <th>已答题目</th>
+            </tr>
+          </thead>
+          <tbody id="total-scores-tbody">
+          </tbody>
+        </table>
+      </div>
+    `;
+    chartsSection.parentNode.insertBefore(container, chartsSection);
+  }
+  
+  const tbody = document.getElementById('total-scores-tbody');
+  if (!tbody) return;
+  
+  if (!studentTotalScores || studentTotalScores.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">暂无学生数据</td></tr>';
+    return;
+  }
+  
+  // 按总评得分降序排列
+  const sorted = [...studentTotalScores].sort((a, b) => b.totalScore - a.totalScore);
+  
+  tbody.innerHTML = sorted.map(s => {
+    const scoreColor = getScoreColor(s.totalScore / 10);
+    const scoreLevel = getScoreLevel(s.totalScore / 10);
+    return `
+      <tr>
+        <td>${s.studentNumber || '-'}</td>
+        <td>${s.studentName}</td>
+        <td><span class="score-badge ${scoreLevel}" style="background-color: ${scoreColor}">${s.totalScore}</span></td>
+        <td>${s.questionCount} 题</td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // 渲染雷达图

@@ -127,7 +127,7 @@ function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       classroom_id INTEGER NOT NULL,
       content TEXT NOT NULL,
-      dimension TEXT,
+      dimensions TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       ended_at DATETIME,
       FOREIGN KEY (classroom_id) REFERENCES classrooms(id)
@@ -190,6 +190,61 @@ function initDatabase() {
   `);
   
   console.log('数据库表创建完成');
+  
+  // 执行数据库迁移
+  migrateDatabase();
+}
+
+/**
+ * 数据库迁移 - 处理字段变更
+ */
+function migrateDatabase() {
+  // 检查questions表是否有旧的dimension字段
+  const tableInfo = db.prepare("PRAGMA table_info(questions)").all();
+  const columnNames = tableInfo.map(col => col.name);
+  
+  // 如果有旧的dimension字段，需要迁移到dimensions
+  if (columnNames.includes('dimension') && !columnNames.includes('dimensions')) {
+    console.log('正在迁移questions表：dimension -> dimensions...');
+    
+    // 添加新的dimensions列（如果不存在）
+    try {
+      db.exec("ALTER TABLE questions ADD COLUMN dimensions TEXT");
+    } catch (e) {
+      // 列可能已存在，忽略错误
+    }
+    
+    // 迁移数据：将旧的dimension值转换为新的dimensions JSON数组格式
+    const questionsWithDimension = db.prepare("SELECT id, dimension FROM questions WHERE dimension IS NOT NULL AND dimension != '' AND dimensions IS NULL").all();
+    
+    for (const q of questionsWithDimension) {
+      // 旧的dimension是单个值，需要转换为数组
+      const newDimensions = JSON.stringify([q.dimension]);
+      db.prepare("UPDATE questions SET dimensions = ? WHERE id = ?").run(newDimensions, q.id);
+    }
+    
+    // 将没有维度的问题设置为默认全部维度
+    const questionsWithoutDimension = db.prepare("SELECT id FROM questions WHERE dimensions IS NULL").all();
+    const defaultDimensions = JSON.stringify(['perception', 'emotion', 'culture', 'aesthetic', 'expression']);
+    
+    for (const q of questionsWithoutDimension) {
+      db.prepare("UPDATE questions SET dimensions = ? WHERE id = ?").run(defaultDimensions, q.id);
+    }
+    
+    console.log(`迁移完成，共处理 ${questionsWithDimension.length + questionsWithoutDimension.length} 条问题`);
+  } else if (!columnNames.includes('dimensions')) {
+    // 全新添加dimensions列
+    try {
+      db.exec("ALTER TABLE questions ADD COLUMN dimensions TEXT");
+      // 设置默认值
+      const defaultDimensions = JSON.stringify(['perception', 'emotion', 'culture', 'aesthetic', 'expression']);
+      db.prepare("UPDATE questions SET dimensions = ? WHERE dimensions IS NULL").run(defaultDimensions);
+    } catch (e) {
+      console.log('dimensions列已存在或无需迁移');
+    }
+  }
+  
+  console.log('数据库迁移检查完成');
 }
 
 /**

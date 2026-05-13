@@ -196,18 +196,28 @@ function matchKeywords(text) {
  * 使用关键词对回答进行评分
  * @param {string} text - 学生回答的文本
  * @param {Object} question - 问题信息
+ * @param {Array} dimensions - 选中的维度数组，如 ['perception', 'emotion']
  * @returns {Object} 评分结果
  */
-function evaluateWithKeywords(text, question) {
-  const matched = matchKeywords(text);
+function evaluateWithKeywords(text, question, dimensions = null) {
+  // 如果没有指定维度，默认全部
+  const selectedDimensions = dimensions && dimensions.length > 0 
+    ? dimensions 
+    : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
   
-  // 计算各维度得分
+  const matched = matchKeywords(text, selectedDimensions);
+  
+  // 计算各维度得分 - 只计算选中的维度
   let totalScore = 0;
   const dimensionScores = {};
   
   for (const [dimension, result] of Object.entries(matched)) {
-    dimensionScores[dimension] = result.dimensionScore;
-    totalScore += result.dimensionScore;
+    if (selectedDimensions.includes(dimension)) {
+      dimensionScores[dimension] = result.dimensionScore;
+      totalScore += result.dimensionScore;
+    } else {
+      dimensionScores[dimension] = 0; // 未选中的维度设为0
+    }
   }
   
   // 表达长度加分
@@ -224,8 +234,10 @@ function evaluateWithKeywords(text, question) {
     structureBonus = scoringConfig.structureBonus.hasStructure;
   }
   
-  // 最终得分
-  const finalScore = Math.min(Math.round((totalScore + lengthBonus + structureBonus) * 10) / 10, scoringConfig.totalScore);
+  // 最终得分 = 选中维度得分 + 加分项
+  // 每个选中维度最高10分，总分 = 选中维度数 * 10 + 加分项
+  const maxScore = selectedDimensions.length * 10;
+  const finalScore = Math.min(Math.round((totalScore + lengthBonus + structureBonus) * 10) / 10, maxScore);
   
   // 生成评语
   let comment = '';
@@ -233,10 +245,12 @@ function evaluateWithKeywords(text, question) {
   const weakDimensions = [];
   
   for (const [dimension, score] of Object.entries(dimensionScores)) {
-    if (score >= 6) {
-      strongDimensions.push(matched[dimension].name);
-    } else if (score < 3) {
-      weakDimensions.push(matched[dimension].name);
+    if (selectedDimensions.includes(dimension)) {
+      if (score >= 6) {
+        strongDimensions.push(matched[dimension].name);
+      } else if (score < 3) {
+        weakDimensions.push(matched[dimension].name);
+      }
     }
   }
   
@@ -259,6 +273,54 @@ function evaluateWithKeywords(text, question) {
     comment,
     method: 'keyword'
   };
+}
+
+/**
+ * 计算文本中关键词的匹配情况（支持维度过滤）
+ * @param {string} text - 学生回答的文本
+ * @param {Array} dimensions - 要评分的维度数组
+ * @returns {Object} 各维度的关键词匹配结果
+ */
+function matchKeywords(text, dimensions = null) {
+  const normalizedText = text.toLowerCase().replace(/[^\u4e00-\u9fa5a-z]/g, '');
+  const results = {};
+  
+  // 如果没有指定维度，评分全部维度
+  const targetDimensions = dimensions && dimensions.length > 0 
+    ? dimensions 
+    : Object.keys(musicKeywords);
+  
+  for (const [dimension, config] of Object.entries(musicKeywords)) {
+    // 如果指定了维度，只处理选中的
+    if (!targetDimensions.includes(dimension)) {
+      continue;
+    }
+    
+    let matchedKeywords = [];
+    let totalScore = 0;
+    
+    for (const keyword of config.keywords) {
+      if (normalizedText.includes(keyword.toLowerCase())) {
+        matchedKeywords.push(keyword);
+        totalScore += scoringConfig.baseScore;
+      }
+    }
+    
+    // 计算维度得分（使用权重和最高分限制）
+    const rawScore = totalScore * config.weight;
+    const dimensionScore = Math.min(rawScore, scoringConfig.maxDimensionScore);
+    
+    results[dimension] = {
+      name: config.name,
+      description: config.description,
+      matchedKeywords,
+      matchedCount: matchedKeywords.length,
+      rawScore: totalScore,
+      dimensionScore: Math.round(dimensionScore * 10) / 10
+    };
+  }
+  
+  return results;
 }
 
 module.exports = {

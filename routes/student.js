@@ -224,19 +224,27 @@ router.post('/answers', async (req, res) => {
     // 获取学生信息
     const student = db.prepare('SELECT * FROM students WHERE id = ?').get(user.id);
     
+    // 获取问题的维度设置
+    let selectedDimensions = ['perception', 'emotion', 'culture', 'aesthetic', 'expression']; // 默认全部
+    if (question.dimensions) {
+      try {
+        selectedDimensions = JSON.parse(question.dimensions);
+      } catch (e) {}
+    }
+    
     // 进行评价
     let evaluation = null;
     
     // 优先尝试AI评价
     try {
-      evaluation = await evaluateWithAI(question.content, content, student.name);
+      evaluation = await evaluateWithAI(question.content, content, student.name, selectedDimensions);
     } catch (e) {
       console.log('AI评价失败，使用关键词评价:', e.message);
     }
     
     // 如果AI评价失败，使用关键词评价
     if (!evaluation) {
-      evaluation = keywordEval.evaluate(question.content, content);
+      evaluation = keywordEval.evaluate(question.content, content, selectedDimensions);
     }
     
     // 保存回答
@@ -254,8 +262,8 @@ router.post('/answers', async (req, res) => {
       evaluation.method
     );
     
-    // 更新学生素养记录
-    updateCompetencyRecord(db, user.id, evaluation.dimensions);
+    // 更新学生素养记录 - 只更新选中的维度
+    updateCompetencyRecord(db, user.id, evaluation.dimensions, selectedDimensions);
     
     // 通过Socket.io广播评价结果
     const io = req.app.get('io');
@@ -265,7 +273,8 @@ router.post('/answers', async (req, res) => {
         studentId: user.id,
         studentName: student.name,
         totalScore: evaluation.totalScore,
-        dimensions: evaluation.dimensions
+        dimensions: evaluation.dimensions,
+        selectedDimensions
       });
       
       // 广播课堂统计更新
@@ -515,8 +524,15 @@ router.get('/answers/:questionId', (req, res) => {
 // ============ 辅助函数 ============
 
 // 更新学生素养记录
-function updateCompetencyRecord(db, studentId, dimensions) {
+function updateCompetencyRecord(db, studentId, dimensions, selectedDimensions = null) {
+  const targetDimensions = selectedDimensions || Object.keys(dimensions);
+  
   for (const [dimension, score] of Object.entries(dimensions)) {
+    // 只更新选中的维度
+    if (!targetDimensions.includes(dimension)) {
+      continue;
+    }
+    
     const existing = db.prepare('SELECT * FROM competency_records WHERE student_id = ? AND dimension = ?').get(
       studentId, dimension
     );
