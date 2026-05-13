@@ -51,7 +51,7 @@ router.get('/classrooms', (req, res) => {
   try {
     const classrooms = db.prepare(`
       SELECT c.*, 
-             (SELECT COUNT(*) FROM classroom_students WHERE classroom_id = c.id) as student_count,
+             (SELECT COUNT(DISTINCT a.student_id) FROM answers a JOIN questions q ON a.question_id = q.id WHERE q.classroom_id = c.id) as student_count,
              (SELECT COUNT(*) FROM questions WHERE classroom_id = c.id) as question_count
       FROM classrooms c
       WHERE c.teacher_id = ?
@@ -307,8 +307,13 @@ router.get('/classrooms/:id/stats', (req, res) => {
       return res.json({ success: false, message: '课堂不存在' });
     }
     
-    // 获取学生数量
-    const studentCount = db.prepare('SELECT COUNT(*) as count FROM classroom_students WHERE classroom_id = ?').get(id).count;
+    // 获取学生数量 - 从实际回答过问题的学生中统计，不依赖classroom_students
+    const studentCount = db.prepare(`
+      SELECT COUNT(DISTINCT a.student_id) as count 
+      FROM answers a 
+      JOIN questions q ON a.question_id = q.id 
+      WHERE q.classroom_id = ?
+    `).get(id).count;
     
     // 获取问题列表（带回答统计）
     const questions = db.prepare(`
@@ -372,11 +377,12 @@ router.get('/classrooms/:id/stats', (req, res) => {
     }
     
     // 计算每个学生的课堂总评（100分制）
-    // 获取所有学生及其回答
+    // 获取所有有回答的学生（不依赖classroom_students）
     const students = db.prepare(`
-      SELECT s.* FROM students s
-      JOIN classroom_students cs ON s.id = cs.student_id
-      WHERE cs.classroom_id = ?
+      SELECT DISTINCT s.* FROM students s
+      JOIN answers a ON a.student_id = s.id
+      JOIN questions q ON a.question_id = q.id
+      WHERE q.classroom_id = ?
     `).all(id);
     
     const studentTotalScores = [];
