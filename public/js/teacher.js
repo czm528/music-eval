@@ -309,7 +309,7 @@ async function loadClassroomStats() {
   }
 }
 
-// 渲染学生成绩横向柱状图
+// 渲染学生成绩竖向柱状图（参考线：优秀/良好/中等/及格）
 function renderStudentScoresChart(studentTotalScores) {
   const container = document.getElementById('stats-overview-section');
   if (!container || !studentTotalScores || studentTotalScores.length === 0) {
@@ -325,37 +325,83 @@ function renderStudentScoresChart(studentTotalScores) {
   // 按总评得分降序排列
   const sorted = [...studentTotalScores].sort((a, b) => b.totalScore - a.totalScore);
   const studentNames = sorted.map(s => s.studentName);
-  const scores = sorted.map(s => s.totalScore);
-  
-  // 根据分数设置颜色
-  const colors = scores.map(s => {
-    if (s >= 80) return '#22c55e'; // 优秀 - 绿色
-    if (s >= 60) return '#3b82f6'; // 良好 - 蓝色
-    if (s >= 40) return '#f59e0b'; // 一般 - 橙色
-    return '#ef4444'; // 较差 - 红色
-  });
+  const scores = sorted.map(s => Math.round(s.totalScore * 10) / 10);
   
   if (studentScoresChart) {
     studentScoresChart.destroy();
   }
   
+  // 动态计算canvas高度：每个学生至少36px
+  const chartHeight = Math.max(400, studentNames.length * 36);
+  const barContainer = container.querySelector('.bar-chart-container');
+  if (barContainer) {
+    barContainer.style.height = chartHeight + 'px';
+  }
+  
+  // 参考线插件
+  const referenceLinePlugin = {
+    id: 'referenceLines',
+    afterDraw(chart) {
+      const { ctx: c, chartArea, scales } = chart;
+      const yAxis = scales.y;
+      
+      const lines = [
+        { value: 90, label: '优秀(90)', color: '#eab308', dash: [] },
+        { value: 80, label: '良好(80)', color: '#a16207', dash: [] },
+        { value: 70, label: '中等(70)', color: '#84cc16', dash: [] },
+        { value: 60, label: '及格(60)', color: '#ef4444', dash: [6, 4] }
+      ];
+      
+      lines.forEach(line => {
+        const yPos = yAxis.getPixelForValue(line.value);
+        if (yPos < chartArea.top || yPos > chartArea.bottom) return;
+        
+        c.save();
+        c.strokeStyle = line.color;
+        c.lineWidth = 1.5;
+        c.globalAlpha = 0.7;
+        c.setLineDash(line.dash);
+        c.beginPath();
+        c.moveTo(chartArea.left, yPos);
+        c.lineTo(chartArea.right, yPos);
+        c.stroke();
+        
+        // 标签
+        c.globalAlpha = 0.9;
+        c.fillStyle = line.color;
+        c.font = '11px sans-serif';
+        c.textAlign = 'right';
+        c.fillText(line.label, chartArea.right - 4, yPos - 4);
+        c.restore();
+      });
+    }
+  };
+  
+  // 柱体颜色：统一青蓝色
+  const barColor = 'rgba(56, 189, 198, 0.85)';
+  const barBorderColor = 'rgba(56, 189, 198, 1)';
+  
   studentScoresChart = new Chart(ctx, {
     type: 'bar',
+    plugins: [referenceLinePlugin],
     data: {
       labels: studentNames,
       datasets: [{
         label: '课堂总评得分',
         data: scores,
-        backgroundColor: colors,
-        borderColor: colors.map(c => c),
+        backgroundColor: barColor,
+        borderColor: barBorderColor,
         borderWidth: 1,
-        borderRadius: 4
+        borderRadius: 3,
+        barPercentage: 0.7
       }]
     },
     options: {
-      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
+      layout: {
+        padding: { top: 10, right: 20 }
+      },
       plugins: {
         legend: {
           display: false
@@ -364,33 +410,61 @@ function renderStudentScoresChart(studentTotalScores) {
           callbacks: {
             label: function(context) {
               const score = context.raw;
-              let level = '较差';
-              if (score >= 80) level = '优秀';
-              else if (score >= 60) level = '良好';
-              else if (score >= 40) level = '一般';
+              let level = '不及格';
+              if (score >= 90) level = '优秀';
+              else if (score >= 80) level = '良好';
+              else if (score >= 70) level = '中等';
+              else if (score >= 60) level = '及格';
               return `${score}分 (${level})`;
             }
           }
-        }
+        },
+        // 柱顶标签
+        datalabels: false
       },
       scales: {
-        x: {
+        y: {
           beginAtZero: true,
           max: 100,
           grid: {
-            color: '#e2e8f0'
+            color: '#f1f5f9'
           },
           ticks: {
-            stepSize: 20
+            stepSize: 10
           }
         },
-        y: {
+        x: {
           grid: {
             display: false
+          },
+          ticks: {
+            maxRotation: 45,
+            minRotation: 30,
+            font: {
+              size: 11
+            }
           }
         }
       }
-    }
+    },
+    plugins: [{
+      // 在柱顶显示分数
+      afterDatasetsDraw(chart) {
+        const { ctx: c } = chart;
+        chart.data.datasets.forEach((dataset, i) => {
+          const meta = chart.getDatasetMeta(i);
+          meta.data.forEach((bar, index) => {
+            const value = dataset.data[index];
+            c.save();
+            c.fillStyle = '#334155';
+            c.font = 'bold 10px sans-serif';
+            c.textAlign = 'center';
+            c.fillText(value, bar.x, bar.y - 4);
+            c.restore();
+          });
+        });
+      }
+    }]
   });
 }
 
@@ -399,9 +473,10 @@ async function loadWordcloudData() {
   if (!currentClassroom) return;
   
   const questions = currentClassroom.questions || [];
-  const endedQuestions = questions.filter(q => q.ended_at);
+  // 使用所有有回答的问题（不仅限于已结束的）
+  const questionsWithAnswers = questions.filter(q => q.answer_count > 0);
   
-  if (endedQuestions.length === 0) {
+  if (questionsWithAnswers.length === 0) {
     document.getElementById('wordcloud-section').style.display = 'none';
     return;
   }
@@ -410,14 +485,14 @@ async function loadWordcloudData() {
   
   // 渲染问题标签
   const tabsContainer = document.getElementById('wordcloud-tabs');
-  tabsContainer.innerHTML = endedQuestions.map((q, idx) => `
+  tabsContainer.innerHTML = questionsWithAnswers.map((q, idx) => `
     <button class="wordcloud-tab ${idx === 0 ? 'active' : ''}" onclick="switchWordcloud(${q.id}, this)">
       题目${idx + 1}
     </button>
   `).join('');
   
   // 默认加载第一题的词云
-  loadQuestionWordcloud(endedQuestions[0].id);
+  loadQuestionWordcloud(questionsWithAnswers[0].id);
 }
 
 // 切换词云
