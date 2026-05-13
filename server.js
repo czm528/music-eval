@@ -43,7 +43,9 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     maxAge: 24 * 60 * 60 * 1000, // 24小时
-    httpOnly: true
+    httpOnly: true,
+    secure: true,    // HTTPS环境必须
+    sameSite: 'none' // 跨域情况必须
   }
 }));
 
