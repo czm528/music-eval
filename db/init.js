@@ -17,13 +17,14 @@ const { musicKeywords } = require('./music-keywords');
 const path = require('path');
 const fs = require('fs');
 
-// 数据库路径（使用绝对路径确保在各种环境下路径正确）
-const dbPath = path.resolve(__dirname, 'music-eval.db');
+// 数据库路径 - 优先使用环境变量DATA_DIR（持久化硬盘挂载目录）
+// 如果设置了DATA_DIR，数据库文件存到持久化目录；否则存到当前目录
+const dataDir = process.env.DATA_DIR || __dirname;
+const dbPath = path.join(dataDir, 'music-eval.db');
 
 // 确保数据库目录存在
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+if (!fs.existsSync(dataDir)) {
+  fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const db = new Database(dbPath);

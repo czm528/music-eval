@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --production
 COPY . .
-RUN mkdir -p db
+RUN mkdir -p db data
 EXPOSE 3000
 ENV HOST=0.0.0.0
 ENV PORT=3000
