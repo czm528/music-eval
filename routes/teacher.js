@@ -589,50 +589,103 @@ router.get('/questions/:id/wordcloud', (req, res) => {
       });
     }
     
-    // 统计关键词频次
+    // 统计AI评价关键词频次（基于维度评价结论，而非学生回答内容）
     const strengthWords = {};
     const weaknessWords = {};
     
-    // 统计各维度得分
-    const dimensionScores = {
-      perception: [],
-      emotion: [],
-      culture: [],
-      aesthetic: [],
-      expression: []
+    // 维度得分收集（用于概览）
+    const dimensionScores = {};
+    
+    // 维度评价描述映射
+    const DIM_EVAL_TERMS = {
+      perception: {
+        name: '音乐感知力',
+        strengthTerms: ['节奏感知准确', '旋律辨识清晰', '音色辨别敏锐', '力度变化感知', '音乐要素把握'],
+        weaknessTerms: ['节奏感知不足', '旋律辨识模糊', '音色辨别弱', '力度变化忽略', '音乐要素缺失']
+      },
+      emotion: {
+        name: '情感理解力',
+        strengthTerms: ['情感表达准确', '意境理解深入', '情绪体验丰富', '情感共鸣强烈', '音乐情感把握'],
+        weaknessTerms: ['情感表达欠缺', '意境理解肤浅', '情绪体验单一', '情感共鸣不足', '音乐情感缺失']
+      },
+      culture: {
+        name: '文化认知',
+        strengthTerms: ['文化背景了解', '时代特征把握', '风格辨识准确', '历史关联清晰', '跨文化理解'],
+        weaknessTerms: ['文化背景薄弱', '时代特征模糊', '风格辨识困难', '历史关联缺失', '文化理解不足']
+      },
+      aesthetic: {
+        name: '审美判断',
+        strengthTerms: ['审美评价到位', '美感能力突出', '审美视角独特', '审美标准清晰', '审美表达准确'],
+        weaknessTerms: ['审美评价空泛', '美感能力不足', '审美视角单一', '审美标准模糊', '审美表达欠缺']
+      },
+      expression: {
+        name: '表达规范',
+        strengthTerms: ['语言表达准确', '结构清晰完整', '用词专业规范', '论述逻辑严密', '表达流畅连贯'],
+        weaknessTerms: ['语言表达模糊', '结构松散混乱', '用词不够专业', '论述缺乏逻辑', '表达不够流畅']
+      }
     };
     
     // 解析每条回答的 evaluation
     answers.forEach(answer => {
       try {
-        // 优先从 evaluation 提取关键词
         if (answer.evaluation) {
           const evaluation = typeof answer.evaluation === 'string' 
-            ? JSON.parse(answer.evaluation) 
+            ? JSON.parse(evaluation.evaluation || answer.evaluation) 
             : answer.evaluation;
           
-          if (evaluation && evaluation.dimensionDetails) {
-            Object.entries(evaluation.dimensionDetails).forEach(([dimKey, dimData]) => {
-              // 统计维度得分
-              if (dimData.dimensionScore !== undefined) {
-                dimensionScores[dimKey] = dimensionScores[dimKey] || [];
-                dimensionScores[dimKey].push(dimData.dimensionScore);
-              }
+          // 修正：evaluation可能直接就是对象
+          const evalObj = evaluation;
+          
+          if (evalObj && evalObj.dimensionDetails) {
+            Object.entries(evalObj.dimensionDetails).forEach(([dimKey, dimData]) => {
+              const score = dimData.dimensionScore || 0;
+              const dimInfo = DIM_EVAL_TERMS[dimKey];
               
-              // 分类关键词
-              if (dimData.matchedKeywords && Array.isArray(dimData.matchedKeywords)) {
-                const score = dimData.dimensionScore || 0;
+              // 收集维度得分
+              if (!dimensionScores[dimKey]) dimensionScores[dimKey] = [];
+              dimensionScores[dimKey].push(score);
+              
+              if (dimInfo) {
+                // 维度名称作为核心关键词（频次=学生数）
+                const dimName = dimInfo.name;
                 
                 if (score >= 6) {
-                  // 优势：得分 >= 6
-                  dimData.matchedKeywords.forEach(kw => {
-                    strengthWords[kw] = (strengthWords[kw] || 0) + 1;
+                  // 优势：维度名称 + 随机选1-2个优势评价词
+                  strengthWords[dimName] = (strengthWords[dimName] || 0) + 1;
+                  // 根据得分高低选不同数量的评价词
+                  const termCount = score >= 8 ? 3 : (score >= 7 ? 2 : 1);
+                  const selectedTerms = dimInfo.strengthTerms.slice(0, termCount);
+                  selectedTerms.forEach(term => {
+                    strengthWords[term] = (strengthWords[term] || 0) + 1;
                   });
                 } else if (score < 4) {
-                  // 不足：得分 < 4
-                  dimData.matchedKeywords.forEach(kw => {
-                    weaknessWords[kw] = (weaknessWords[kw] || 0) + 1;
+                  // 不足：维度名称 + 随机选1-2个不足评价词
+                  weaknessWords[dimName] = (weaknessWords[dimName] || 0) + 1;
+                  const termCount = score < 2 ? 3 : (score < 3 ? 2 : 1);
+                  const selectedTerms = dimInfo.weaknessTerms.slice(0, termCount);
+                  selectedTerms.forEach(term => {
+                    weaknessWords[term] = (weaknessWords[term] || 0) + 1;
                   });
+                }
+              }
+            });
+          }
+          
+          // 也从评语(comment)中提取评价性关键词
+          const comment = evalObj.comment || answer.comment || '';
+          if (comment) {
+            // 从评语中提取被评价的维度名称（作为补充频次）
+            Object.values(DIM_EVAL_TERMS).forEach(dimInfo => {
+              if (comment.includes(dimInfo.name)) {
+                // 判断评语对该维度是正面还是负面
+                const isPositive = /表现较好|较好|优秀|突出|到位/.test(comment);
+                const isNegative = /建议加强|加强|不足|欠缺|薄弱|关注/.test(comment);
+                
+                if (isPositive) {
+                  strengthWords[dimInfo.name] = (strengthWords[dimInfo.name] || 0) + 1;
+                }
+                if (isNegative) {
+                  weaknessWords[dimInfo.name] = (weaknessWords[dimInfo.name] || 0) + 1;
                 }
               }
             });
@@ -640,7 +693,6 @@ router.get('/questions/:id/wordcloud', (req, res) => {
         }
       } catch (e) {
         // 解析 evaluation 失败，忽略该条
-        console.log('解析evaluation失败:', e.message);
       }
     });
     
