@@ -475,6 +475,83 @@ router.get('/classrooms/:id/stats', (req, res) => {
   }
 });
 
+// ============ 词云分析 ============
+
+// 中文停用词列表
+const STOP_WORDS = new Set([
+  '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '一个', '上', '也', '很', '到', '说', '要', '去',
+  '你', '会', '着', '没有', '看', '好', '自己', '这', '他', '她', '它', '们', '那', '些', '什么', '怎么', '这个', '那个',
+  '可以', '因为', '所以', '但是', '而且', '或者', '如果', '虽然', '已经', '就是', '只是', '还是', '这样', '那样',
+  '觉得', '认为', '感觉', '知道', '可能', '应该', '能够', '需要', '通过', '进行', '使用', '以及', '其中', '关于',
+  '对于', '作为', '之间', '与', '为', '以', '而', '把', '被', '让', '给', '向', '从', '由', '对', '将', '把', '还',
+  '更', '最', '非常', '特别', '十分', '比较', '相当', '极', '之', '其', '此', '每', '各', '某', '所', '等等', '等',
+  '一下', '一点', '一些', '一边', '一面', '一会儿', '起来', '出来', '过来', '下来', '上去', '进去', '回来', '过去',
+  '开始', '进行', '完成', '成为', '发生', '出现', '存在', '具有', '形成', '表现', '体现', '展现', '呈现', '展示'
+]);
+
+// 简单中文分词 - 基于2-4字的n-gram提取
+function extractKeywords(texts, topN = 50) {
+  const wordCount = {};
+  
+  texts.forEach(text => {
+    if (!text) return;
+    
+    // 清理文本
+    const cleaned = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ' ').trim();
+    const chars = cleaned.replace(/\s+/g, '');
+    
+    // 提取2-4字的词
+    for (let len = 2; len <= 4; len++) {
+      for (let i = 0; i <= chars.length - len; i++) {
+        const word = chars.substring(i, i + len);
+        
+        // 跳过包含停用词的词（但保留完整匹配的音乐关键词）
+        if (STOP_WORDS.has(word) && word.length === 2) continue;
+        
+        // 如果词包含停用词作为开头或结尾，跳过
+        if (len === 2 && STOP_WORDS.has(word)) continue;
+        
+        wordCount[word] = (wordCount[word] || 0) + 1;
+      }
+    }
+  });
+  
+  // 过滤掉频次太低的词
+  const filtered = Object.entries(wordCount)
+    .filter(([word, count]) => count >= 2 && word.length >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, topN);
+  
+  return filtered.map(([name, value]) => ({ name, value }));
+}
+
+// 获取问题的词云数据
+router.get('/questions/:id/wordcloud', (req, res) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  
+  try {
+    // 获取该问题的所有回答
+    const answers = db.prepare(`
+      SELECT content FROM answers
+      WHERE question_id = ?
+    `).all(id);
+    
+    if (!answers || answers.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+    
+    // 提取关键词
+    const texts = answers.map(a => a.content);
+    const keywords = extractKeywords(texts, 50);
+    
+    res.json({ success: true, data: keywords });
+  } catch (error) {
+    console.error('获取词云数据错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
 // ============ 学生画像 ============
 
 // 获取单个学生的素养画像

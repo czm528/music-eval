@@ -7,6 +7,7 @@ let currentClassroom = null;
 let classroomList = [];
 let radarChart = null;
 let distributionChart = null;
+let studentScoresChart = null;
 let qrCodeData = null;
 
 // 页面初始化
@@ -285,6 +286,9 @@ async function loadClassroomStats() {
     
     const data = res.data;
     
+    // 渲染学生成绩横向柱状图
+    renderStudentScoresChart(data.studentTotalScores);
+    
     // 渲染雷达图
     renderRadarChart(data.dimensionAvgs);
     
@@ -294,12 +298,225 @@ async function loadClassroomStats() {
     // 渲染学生课堂总评列表
     renderStudentTotalScores(data.studentTotalScores);
     
+    // 加载词云数据
+    loadWordcloudData();
+    
     // 更新回答详情
     loadAnswerList();
     
   } catch (error) {
     console.error('加载统计数据错误:', error);
   }
+}
+
+// 渲染学生成绩横向柱状图
+function renderStudentScoresChart(studentTotalScores) {
+  const container = document.getElementById('stats-overview-section');
+  if (!container || !studentTotalScores || studentTotalScores.length === 0) {
+    if (container) container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'block';
+  
+  const ctx = document.getElementById('student-scores-chart');
+  if (!ctx) return;
+  
+  // 按总评得分降序排列
+  const sorted = [...studentTotalScores].sort((a, b) => b.totalScore - a.totalScore);
+  const studentNames = sorted.map(s => s.studentName);
+  const scores = sorted.map(s => s.totalScore);
+  
+  // 根据分数设置颜色
+  const colors = scores.map(s => {
+    if (s >= 80) return '#22c55e'; // 优秀 - 绿色
+    if (s >= 60) return '#3b82f6'; // 良好 - 蓝色
+    if (s >= 40) return '#f59e0b'; // 一般 - 橙色
+    return '#ef4444'; // 较差 - 红色
+  });
+  
+  if (studentScoresChart) {
+    studentScoresChart.destroy();
+  }
+  
+  studentScoresChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: studentNames,
+      datasets: [{
+        label: '课堂总评得分',
+        data: scores,
+        backgroundColor: colors,
+        borderColor: colors.map(c => c),
+        borderWidth: 1,
+        borderRadius: 4
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const score = context.raw;
+              let level = '较差';
+              if (score >= 80) level = '优秀';
+              else if (score >= 60) level = '良好';
+              else if (score >= 40) level = '一般';
+              return `${score}分 (${level})`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          max: 100,
+          grid: {
+            color: '#e2e8f0'
+          },
+          ticks: {
+            stepSize: 20
+          }
+        },
+        y: {
+          grid: {
+            display: false
+          }
+        }
+      }
+    }
+  });
+}
+
+// 加载词云数据
+async function loadWordcloudData() {
+  if (!currentClassroom) return;
+  
+  const questions = currentClassroom.questions || [];
+  const endedQuestions = questions.filter(q => q.ended_at);
+  
+  if (endedQuestions.length === 0) {
+    document.getElementById('wordcloud-section').style.display = 'none';
+    return;
+  }
+  
+  document.getElementById('wordcloud-section').style.display = 'block';
+  
+  // 渲染问题标签
+  const tabsContainer = document.getElementById('wordcloud-tabs');
+  tabsContainer.innerHTML = endedQuestions.map((q, idx) => `
+    <button class="wordcloud-tab ${idx === 0 ? 'active' : ''}" onclick="switchWordcloud(${q.id}, this)">
+      题目${idx + 1}
+    </button>
+  `).join('');
+  
+  // 默认加载第一题的词云
+  loadQuestionWordcloud(endedQuestions[0].id);
+}
+
+// 切换词云
+function switchWordcloud(questionId, btn) {
+  // 更新标签样式
+  document.querySelectorAll('.wordcloud-tab').forEach(tab => tab.classList.remove('active'));
+  btn.classList.add('active');
+  
+  // 加载词云
+  loadQuestionWordcloud(questionId);
+}
+
+// 加载单个问题的词云
+async function loadQuestionWordcloud(questionId) {
+  const container = document.getElementById('wordcloud-container');
+  
+  try {
+    const res = await apiRequest(`/api/teacher/questions/${questionId}/wordcloud`);
+    
+    if (!res.success || !res.data || res.data.length === 0) {
+      container.innerHTML = '<p class="empty-state">暂无足够的回答数据生成词云</p>';
+      return;
+    }
+    
+    // 使用 ECharts 渲染词云
+    renderEChartsWordcloud(container, res.data);
+    
+  } catch (error) {
+    console.error('加载词云数据错误:', error);
+    container.innerHTML = '<p class="empty-state">加载词云失败</p>';
+  }
+}
+
+// 使用 ECharts 渲染词云
+function renderEChartsWordcloud(container, words) {
+  // 生成唯一ID
+  const chartId = 'wordcloud-chart-' + Date.now();
+  container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 400px;"></div>`;
+  
+  const chart = echarts.init(document.getElementById(chartId));
+  
+  // 词云颜色配置
+  const colors = [
+    '#0d9488', '#3b82f6', '#8b5cf6', '#ec4899', 
+    '#f59e0b', '#10b981', '#6366f1', '#14b8a6'
+  ];
+  
+  // 格式化数据
+  const wordCloudData = words.map((item, idx) => ({
+    name: item.name,
+    value: item.value,
+    itemStyle: {
+      color: colors[idx % colors.length]
+    }
+  }));
+  
+  const option = {
+    backgroundColor: '#ffffff',
+    tooltip: {
+      show: true,
+      formatter: function(params) {
+        return `${params.name}: ${params.value}次`;
+      }
+    },
+    series: [{
+      type: 'wordCloud',
+      shape: 'circle',
+      left: 'center',
+      top: 'center',
+      width: '90%',
+      height: '90%',
+      sizeRange: [14, 60],
+      rotationRange: [-45, 45],
+      rotationStep: 15,
+      gridSize: 8,
+      drawOutOfBound: false,
+      textStyle: {
+        fontFamily: 'sans-serif',
+        fontWeight: 'bold',
+        color: function() {
+          return colors[Math.floor(Math.random() * colors.length)];
+        }
+      },
+      emphasis: {
+        textStyle: {
+          shadowBlur: 10,
+          shadowColor: '#333'
+        }
+      },
+      data: wordCloudData
+    }]
+  };
+  
+  chart.setOption(option);
+  
+  // 响应窗口大小变化
+  window.addEventListener('resize', function() {
+    chart.resize();
+  });
 }
 
 // 渲染学生课堂总评列表

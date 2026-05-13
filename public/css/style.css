@@ -1897,6 +1897,146 @@ textarea {
   border-radius: var(--radius);
 }
 
+/* ============ 学生成绩横向柱状图 ============ */
+.stats-overview-section {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.stats-overview-section h3 {
+  margin-bottom: var(--space);
+  font-size: 15px;
+}
+
+.horizontal-bar-container {
+  height: auto;
+  min-height: 200px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+/* ============ 词云区域 ============ */
+.wordcloud-section {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-top: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.wordcloud-section h3 {
+  margin-bottom: var(--space);
+  font-size: 15px;
+}
+
+.wordcloud-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin-bottom: var(--space);
+  padding-bottom: var(--space);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wordcloud-tab {
+  padding: var(--space-sm) var(--space);
+  border: 1px solid var(--border-color);
+  background: var(--bg-light);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.wordcloud-tab:hover {
+  background: var(--bg-white);
+  color: var(--text-primary);
+}
+
+.wordcloud-tab.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.wordcloud-container {
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wordcloud-container .empty-state {
+  color: var(--text-muted);
+  padding: var(--space-xl);
+}
+
+/* ============ 分数等级颜色 ============ */
+.score-badge.excellent {
+  background: #22c55e;
+  color: white;
+}
+
+.score-badge.good {
+  background: #3b82f6;
+  color: white;
+}
+
+.score-badge.normal {
+  background: #f59e0b;
+  color: white;
+}
+
+.score-badge.poor {
+  background: #ef4444;
+  color: white;
+}
+
+/* ============ 学生总评表格 ============ */
+.student-total-scores {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.student-total-scores h3 {
+  margin-bottom: var(--space);
+  font-size: 15px;
+}
+
+.total-scores-table {
+  overflow-x: auto;
+}
+
+.total-scores-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.total-scores-table th,
+.total-scores-table td {
+  padding: var(--space-sm) var(--space);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.total-scores-table th {
+  background: var(--bg-light);
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.total-scores-table tr:hover td {
+  background: var(--bg-light);
+}
+
 .dimension-label {
   display: block;
   font-weight: 500;

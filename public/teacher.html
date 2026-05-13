@@ -6,6 +6,8 @@
   <title>教师工作台 - 音乐鉴赏课评价系统</title>
   <link rel="stylesheet" href="/css/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts-wordcloud@2/dist/echarts-wordcloud.min.js"></script>
 </head>
 <body class="teacher-page">
   <header class="top-header">
@@ -142,6 +144,14 @@
           </div>
         </div>
         
+        <!-- 学生成绩概览 - 横向柱状图 -->
+        <div class="stats-overview-section" id="stats-overview-section" style="display: none;">
+          <h3>📊 学生成绩概览</h3>
+          <div class="horizontal-bar-container">
+            <canvas id="student-scores-chart"></canvas>
+          </div>
+        </div>
+        
         <!-- 评价图表 -->
         <div class="charts-section">
           <h3>评价分析</h3>
@@ -163,6 +173,13 @@
           <div class="answer-list" id="answer-list">
             <p class="empty-state">暂无回答</p>
           </div>
+        </div>
+        
+        <!-- 回答词云 -->
+        <div class="wordcloud-section" id="wordcloud-section" style="display: none;">
+          <h3>☁️ 回答词云分析</h3>
+          <div class="wordcloud-tabs" id="wordcloud-tabs"></div>
+          <div class="wordcloud-container" id="wordcloud-container"></div>
         </div>
       </div>
     </main>
