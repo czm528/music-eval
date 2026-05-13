@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>系统管理 - 音乐鉴赏课评价系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="admin-page">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <h2>🎵 管理后台</h2>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-section="dashboard">
+        <span class="nav-icon">📊</span> 数据总览
+      </a>
+      <a href="#" class="nav-item" data-section="teachers">
+        <span class="nav-icon">👨‍🏫</span> 教师管理
+      </a>
+      <a href="#" class="nav-item" data-section="classes">
+        <span class="nav-icon">📚</span> 班级管理
+      </a>
+      <a href="#" class="nav-item" data-section="students">
+        <span class="nav-icon">👨‍🎓</span> 学生管理
+      </a>
+      <a href="#" class="nav-item" data-section="config">
+        <span class="nav-icon">⚙️</span> 系统配置
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="btn btn-text" onclick="logout()">
+        <span>🚪</span> 退出登录
+      </button>
+    </div>
+  </div>
+  
+  <div class="main-content">
+    <header class="page-header">
+      <h1>数据总览</h1>
+      <div class="user-info">
+        <span id="user-name">管理员</span>
+      </div>
+    </header>
+    
+    <!-- 数据总览 -->
+    <section id="section-dashboard" class="content-section active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon">👨‍🏫</div>
+          <div class="stat-info">
+            <span class="stat-num" id="stat-teachers">0</span>
+            <span class="stat-label">教师数量</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📚</div>
+          <div class="stat-info">
+            <span class="stat-num" id="stat-classes">0</span>
+            <span class="stat-label">班级数量</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">👨‍🎓</div>
+          <div class="stat-info">
+            <span class="stat-num" id="stat-students">0</span>
+            <span class="stat-label">学生数量</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon">📝</div>
+          <div class="stat-info">
+            <span class="stat-num" id="stat-answers">0</span>
+            <span class="stat-label">回答总数</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="dashboard-charts">
+        <div class="chart-card">
+          <h3>素养维度平均分</h3>
+          <canvas id="radar-chart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>评价概览</h3>
+          <canvas id="overview-chart"></canvas>
+        </div>
+      </div>
+      
+      <div class="recent-activity">
+        <h3>最近评价记录</h3>
+        <div class="activity-list" id="activity-list">
+          <p class="empty-state">暂无数据</p>
+        </div>
+      </div>
+    </section>
+    
+    <!-- 教师管理 -->
+    <section id="section-teachers" class="content-section">
+      <div class="section-toolbar">
+        <button class="btn btn-primary" onclick="showTeacherModal()">
+          + 添加教师
+        </button>
+      </div>
+      
+      <div class="table-container">
+        <table class="data-table" id="teachers-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户名</th>
+              <th>姓名</th>
+              <th>邮箱</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    
+    <!-- 班级管理 -->
+    <section id="section-classes" class="content-section">
+      <div class="section-toolbar">
+        <button class="btn btn-primary" onclick="showClassModal()">
+          + 添加班级
+        </button>
+      </div>
+      
+      <div class="table-container">
+        <table class="data-table" id="classes-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>班级名称</th>
+              <th>年级</th>
+              <th>班主任</th>
+              <th>学生数</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    
+    <!-- 学生管理 -->
+    <section id="section-students" class="content-section">
+      <div class="section-toolbar">
+        <div class="toolbar-left">
+          <select id="filter-class" class="form-select">
+            <option value="">全部班级</option>
+          </select>
+          <button class="btn btn-secondary" onclick="loadStudents()">筛选</button>
+        </div>
+        <button class="btn btn-primary" onclick="showStudentModal()">
+          + 添加学生
+        </button>
+      </div>
+      
+      <div class="table-container">
+        <table class="data-table" id="students-table">
+          <thead>
+            <tr>
+              <th>学号</th>
+              <th>姓名</th>
+              <th>班级</th>
+              <th>回答数</th>
+              <th>平均分</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+    
+    <!-- 系统配置 -->
+    <section id="section-config" class="content-section">
+      <div class="config-card">
+        <h3>AI评价配置</h3>
+        <p class="config-hint">配置OpenAI兼容API以启用AI智能评分功能</p>
+        
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="ai-enabled">
+            启用AI评价
+          </label>
+        </div>
+        
+        <div class="form-group">
+          <label for="ai-api-url">API 地址</label>
+          <input type="text" id="ai-api-url" placeholder="https://api.openai.com/v1/chat/completions">
+        </div>
+        
+        <div class="form-group">
+          <label for="ai-api-key">API Key</label>
+          <input type="password" id="ai-api-key" placeholder="sk-...">
+        </div>
+        
+        <div class="form-group">
+          <label for="ai-model">模型名称</label>
+          <input type="text" id="ai-model" placeholder="gpt-3.5-turbo">
+        </div>
+        
+        <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+      </div>
+      
+      <div class="config-card">
+        <h3>修改密码</h3>
+        <div class="form-group">
+          <label for="old-password">原密码</label>
+          <input type="password" id="old-password">
+        </div>
+        <div class="form-group">
+          <label for="new-password">新密码</label>
+          <input type="password" id="new-password">
+        </div>
+        <button class="btn btn-primary" onclick="changePassword()">修改密码</button>
+      </div>
+    </section>
+  </div>
+  
+  <!-- 教师弹窗 -->
+  <div id="teacher-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="teacher-modal-title">添加教师</h3>
+        <button class="modal-close" onclick="closeTeacherModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="teacher-id">
+        <div class="form-group">
+          <label for="teacher-username">用户名 *</label>
+          <input type="text" id="teacher-username" required>
+        </div>
+        <div class="form-group">
+          <label for="teacher-nickname">姓名 *</label>
+          <input type="text" id="teacher-nickname" required>
+        </div>
+        <div class="form-group">
+          <label for="teacher-email">邮箱</label>
+          <input type="email" id="teacher-email">
+        </div>
+        <div class="form-group">
+          <label for="teacher-password">密码 <span id="password-hint">*</span></label>
+          <input type="password" id="teacher-password">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeTeacherModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveTeacher()">保存</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 班级弹窗 -->
+  <div id="class-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="class-modal-title">添加班级</h3>
+        <button class="modal-close" onclick="closeClassModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="class-id">
+        <div class="form-group">
+          <label for="class-name">班级名称 *</label>
+          <input type="text" id="class-name" required>
+        </div>
+        <div class="form-group">
+          <label for="class-grade">年级</label>
+          <input type="text" id="class-grade" placeholder="如：高一">
+        </div>
+        <div class="form-group">
+          <label for="class-teacher">班主任</label>
+          <select id="class-teacher">
+            <option value="">无</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="class-desc">描述</label>
+          <textarea id="class-desc" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeClassModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveClass()">保存</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 学生弹窗 -->
+  <div id="student-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="student-modal-title">添加学生</h3>
+        <button class="modal-close" onclick="closeStudentModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="student-number">学号 *</label>
+          <input type="text" id="student-number" required>
+        </div>
+        <div class="form-group">
+          <label for="student-name">姓名 *</label>
+          <input type="text" id="student-name" required>
+        </div>
+        <div class="form-group">
+          <label for="student-class">班级</label>
+          <select id="student-class">
+            <option value="">无</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeStudentModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveStudent()">保存</button>
+      </div>
+    </div>
+  </div>
+  
+  <script src="/js/common.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

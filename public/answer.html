@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>答题 - 音乐鉴赏课</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="answer-page">
+  <div class="answer-container">
+    <!-- 课堂信息头部 -->
+    <div class="classroom-header">
+      <div class="classroom-info">
+        <h1 id="classroom-name">音乐鉴赏课</h1>
+        <p id="teacher-name">教师</p>
+      </div>
+      <div class="user-badge">
+        <span id="user-name">学生</span>
+      </div>
+    </div>
+    
+    <!-- 加入表单（未加入时显示） -->
+    <div id="join-form" class="join-section">
+      <div class="join-card">
+        <h2>👋 加入课堂</h2>
+        <p class="join-hint">请输入您的姓名开始答题</p>
+        <form onsubmit="joinClassroom(event)">
+          <div class="form-group">
+            <input type="text" id="student-name-input" placeholder="请输入姓名" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block btn-lg">
+            加入课堂
+          </button>
+        </form>
+      </div>
+    </div>
+    
+    <!-- 答题区域（加入后显示） -->
+    <div id="answer-section" class="answer-section hidden">
+      <!-- 当前问题 -->
+      <div class="question-card" id="question-card">
+        <div class="question-label">
+          <span class="label-icon">❓</span>
+          当前问题
+        </div>
+        <div class="question-text" id="current-question">
+          加载中...
+        </div>
+      </div>
+      
+      <!-- 回答状态 -->
+      <div id="answer-status" class="answer-status">
+        <!-- 未回答时显示答题表单 -->
+        <div id="answer-form-section" class="answer-form-section">
+          <textarea id="answer-input" placeholder="请在这里输入您的回答..." rows="6"></textarea>
+          <button class="btn btn-primary btn-block btn-lg" onclick="submitAnswer()">
+            提交回答
+          </button>
+        </div>
+        
+        <!-- 已回答时显示结果 -->
+        <div id="answer-result-section" class="answer-result-section hidden">
+          <div class="result-header">
+            <span class="result-icon">✅</span>
+            <span>回答已提交</span>
+          </div>
+          
+          <div class="score-display">
+            <div class="score-circle">
+              <span class="score-num" id="my-score">0</span>
+              <span class="score-label">得分</span>
+            </div>
+          </div>
+          
+          <div class="dimensions-display" id="dimensions-display">
+            <!-- 维度得分将由JS填充 -->
+          </div>
+          
+          <div class="comment-section">
+            <h4>💬 评语</h4>
+            <p id="my-comment">正在加载评语...</p>
+          </div>
+          
+          <div class="tips-section" id="tips-section" style="display: none;">
+            <h4>📝 建议</h4>
+            <ul id="my-tips"></ul>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 问题历史 -->
+      <div class="history-section">
+        <h3>📋 问题历史</h3>
+        <div class="history-list" id="history-list">
+          <p class="empty-state">暂无历史问题</p>
+        </div>
+      </div>
+      
+      <!-- 底部导航 -->
+      <div class="bottom-nav">
+        <a href="/student/profile" class="nav-btn">
+          <span class="nav-icon">👤</span>
+          <span>我的画像</span>
+        </a>
+        <button class="nav-btn" onclick="refreshQuestion()">
+          <span class="nav-icon">🔄</span>
+          <span>刷新</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Toast提示 -->
+  <div id="toast" class="toast"></div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/answer.js"></script>
+</body>
+</html>

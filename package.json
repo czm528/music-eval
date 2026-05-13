@@ -1,0 +1,30 @@
+{
+  "name": "music-appreciation-eval-system",
+  "version": "1.0.0",
+  "description": "音乐鉴赏课学生评价系统 - 课堂即时问答与AI智能评分",
+  "main": "server.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "education",
+    "music",
+    "realtime",
+    "ai-evaluation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^9.4.3",
+    "express": "^4.18.2",
+    "express-session": "^1.18.0",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.4",
+    "uuid": "^9.0.1"
+  }
+}

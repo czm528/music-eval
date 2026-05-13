@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的素养画像 - 音乐鉴赏课</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="student-page">
+  <header class="top-header">
+    <div class="header-left">
+      <h1>👤 我的素养画像</h1>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-text" onclick="logout()">退出</button>
+    </div>
+  </header>
+  
+  <div class="profile-container">
+    <!-- 学生信息卡片 -->
+    <div class="profile-card">
+      <div class="profile-avatar">
+        <span>🎵</span>
+      </div>
+      <div class="profile-info">
+        <h2 id="student-name">加载中...</h2>
+        <p id="student-class">班级</p>
+      </div>
+      <div class="profile-stats">
+        <div class="p-stat">
+          <span class="p-num" id="total-answers">0</span>
+          <span class="p-label">回答总数</span>
+        </div>
+        <div class="p-stat highlight">
+          <span class="p-num" id="avg-score">0</span>
+          <span class="p-label">平均得分</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 素养雷达图 -->
+    <div class="competency-card">
+      <h3>🎯 音乐素养分析</h3>
+      <div class="radar-chart-container">
+        <canvas id="competency-radar"></canvas>
+      </div>
+      <div class="competency-list" id="competency-list">
+        <!-- 维度列表由JS填充 -->
+      </div>
+    </div>
+    
+    <!-- 历史记录 -->
+    <div class="history-card">
+      <h3>📝 答题记录</h3>
+      <div class="history-list" id="history-list">
+        <p class="empty-state">暂无答题记录</p>
+      </div>
+      <div class="load-more" id="load-more" style="display: none;">
+        <button class="btn btn-secondary" onclick="loadMoreHistory()">加载更多</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 回答详情弹窗 -->
+  <div id="answer-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>回答详情</h3>
+        <button class="modal-close" onclick="closeAnswerModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="answer-detail">
+          <div class="detail-section">
+            <h4>问题</h4>
+            <p id="detail-question"></p>
+          </div>
+          <div class="detail-section">
+            <h4>我的回答</h4>
+            <p id="detail-answer"></p>
+          </div>
+          <div class="detail-section">
+            <h4>得分</h4>
+            <div class="detail-score">
+              <span id="detail-score">0</span> / 50
+            </div>
+          </div>
+          <div class="detail-section">
+            <h4>各维度得分</h4>
+            <div class="detail-dimensions" id="detail-dimensions"></div>
+          </div>
+          <div class="detail-section">
+            <h4>评语</h4>
+            <p id="detail-comment"></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Toast提示 -->
+  <div id="toast" class="toast"></div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/student.js"></script>
+</body>
+</html>

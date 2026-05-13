@@ -1,0 +1,29 @@
+# 依赖目录（不需要上传到GitHub）
+node_modules/
+
+# 数据库文件（每次部署会自动重新创建）
+db/music-eval.db
+db/music-eval.db-wal
+db/music-eval.db-shm
+
+# macOS系统文件
+.DS_Store
+
+# 日志文件
+*.log
+npm-debug.log*
+
+# 环境变量文件（包含敏感信息）
+.env
+.env.local
+.env.*.local
+
+# IDE配置
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 临时文件
+tmp/
+temp/

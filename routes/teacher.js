@@ -1,0 +1,473 @@
+/**
+ * 教师路由
+ * 处理教师相关的操作：课堂管理、问题发布、评价查看、数据看板
+ */
+
+const express = require('express');
+const { v4: uuidv4 } = require('uuid');
+const QRCode = require('qrcode');
+const router = express.Router();
+const { getDatabase } = require('../db/init');
+const config = require('../config');
+
+// 中间件：检查教师权限
+function requireTeacher(req, res, next) {
+  if (!req.session.user || req.session.user.role !== 'teacher') {
+    return res.status(401).json({ success: false, message: '无权限访问' });
+  }
+  next();
+}
+
+router.use(requireTeacher);
+
+// ============ 课堂管理 ============
+
+// 获取教师的课堂列表
+router.get('/classrooms', (req, res) => {
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    const classrooms = db.prepare(`
+      SELECT c.*, 
+             (SELECT COUNT(*) FROM classroom_students WHERE classroom_id = c.id) as student_count,
+             (SELECT COUNT(*) FROM questions WHERE classroom_id = c.id) as question_count
+      FROM classrooms c
+      WHERE c.teacher_id = ?
+      ORDER BY c.created_at DESC
+    `).all(user.id);
+    
+    res.json({ success: true, data: classrooms });
+  } catch (error) {
+    console.error('获取课堂列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 创建课堂
+router.post('/classrooms', (req, res) => {
+  const user = req.session.user;
+  const { name, description, classId } = req.body;
+  
+  if (!name) {
+    return res.json({ success: false, message: '请填写课堂名称' });
+  }
+  
+  const db = getDatabase();
+  
+  try {
+    const sessionId = uuidv4().replace(/-/g, '').substring(0, 12);
+    
+    const result = db.prepare(`
+      INSERT INTO classrooms (session_id, name, description, teacher_id, class_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(sessionId, name, description || null, user.id, classId || null);
+    
+    // 生成二维码
+    const joinUrl = `${config.frontend.baseUrl}/answer/${sessionId}`;
+    
+    QRCode.toDataURL(joinUrl, { width: 300, margin: 2 }, (err, qrCode) => {
+      if (err) {
+        return res.json({ success: true, message: '创建成功', data: { id: result.lastInsertRowid, sessionId, qrCode: null, joinUrl } });
+      }
+      res.json({ success: true, message: '创建成功', data: { id: result.lastInsertRowid, sessionId, qrCode, joinUrl } });
+    });
+  } catch (error) {
+    console.error('创建课堂错误:', error);
+    res.json({ success: false, message: '创建失败' });
+  }
+});
+
+// 获取课堂详情
+router.get('/classrooms/:id', (req, res) => {
+  const { id } = req.params;
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    const classroom = db.prepare(`
+      SELECT c.*, t.nickname as teacher_name
+      FROM classrooms c
+      JOIN teachers t ON c.teacher_id = t.id
+      WHERE c.id = ? AND c.teacher_id = ?
+    `).get(id, user.id);
+    
+    if (!classroom) {
+      return res.json({ success: false, message: '课堂不存在' });
+    }
+    
+    // 获取已加入的学生
+    const students = db.prepare(`
+      SELECT s.*, cs.join_time
+      FROM students s
+      JOIN classroom_students cs ON s.id = cs.student_id
+      WHERE cs.classroom_id = ?
+    `).all(id);
+    
+    // 获取问题列表
+    const questions = db.prepare(`
+      SELECT q.*,
+             (SELECT COUNT(*) FROM answers WHERE question_id = q.id) as answer_count,
+             (SELECT AVG(total_score) FROM answers WHERE question_id = q.id) as avg_score
+      FROM questions q
+      WHERE q.classroom_id = ?
+      ORDER BY q.created_at DESC
+    `).all(id);
+    
+    // 获取二维码（重新生成）
+    const joinUrl = `${config.frontend.baseUrl}/answer/${classroom.session_id}`;
+    QRCode.toDataURL(joinUrl, { width: 300, margin: 2 }, (err, qrCode) => {
+      res.json({
+        success: true,
+        data: {
+          ...classroom,
+          qrCode: qrCode || null,
+          joinUrl,
+          students,
+          questions
+        }
+      });
+    });
+  } catch (error) {
+    console.error('获取课堂详情错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 结束课堂
+router.post('/classrooms/:id/end', (req, res) => {
+  const { id } = req.params;
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    db.prepare(`
+      UPDATE classrooms 
+      SET status = 'ended', ended_at = CURRENT_TIMESTAMP 
+      WHERE id = ? AND teacher_id = ?
+    `).run(id, user.id);
+    
+    res.json({ success: true, message: '课堂已结束' });
+  } catch (error) {
+    console.error('结束课堂错误:', error);
+    res.json({ success: false, message: '操作失败' });
+  }
+});
+
+// 删除课堂
+router.delete('/classrooms/:id', (req, res) => {
+  const { id } = req.params;
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    // 先删除关联数据
+    const questions = db.prepare('SELECT id FROM questions WHERE classroom_id = ?').all(id);
+    for (const q of questions) {
+      db.prepare('DELETE FROM answers WHERE question_id = ?').run(q.id);
+    }
+    db.prepare('DELETE FROM questions WHERE classroom_id = ?').run(id);
+    db.prepare('DELETE FROM classroom_students WHERE classroom_id = ?').run(id);
+    db.prepare('DELETE FROM classrooms WHERE id = ? AND teacher_id = ?').run(id, user.id);
+    
+    res.json({ success: true, message: '删除成功' });
+  } catch (error) {
+    console.error('删除课堂错误:', error);
+    res.json({ success: false, message: '删除失败' });
+  }
+});
+
+// ============ 问题管理 ============
+
+// 发布新问题
+router.post('/questions', (req, res) => {
+  const { classroomId, content, dimension } = req.body;
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    // 验证课堂归属
+    const classroom = db.prepare('SELECT * FROM classrooms WHERE id = ? AND teacher_id = ?').get(classroomId, user.id);
+    if (!classroom) {
+      return res.json({ success: false, message: '课堂不存在' });
+    }
+    
+    if (classroom.status !== 'active') {
+      return res.json({ success: false, message: '课堂已结束，无法发布问题' });
+    }
+    
+    const result = db.prepare('INSERT INTO questions (classroom_id, content, dimension) VALUES (?, ?, ?)').run(
+      classroomId, content, dimension || null
+    );
+    
+    // 通过Socket.io广播新问题
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`classroom:${classroomId}`).emit('new-question', {
+        questionId: result.lastInsertRowid,
+        content,
+        dimension,
+        createdAt: new Date().toISOString()
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: '问题已发布',
+      data: { id: result.lastInsertRowid }
+    });
+  } catch (error) {
+    console.error('发布问题错误:', error);
+    res.json({ success: false, message: '发布失败' });
+  }
+});
+
+// 结束当前问题
+router.post('/questions/:id/end', (req, res) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  
+  try {
+    db.prepare('UPDATE questions SET ended_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    res.json({ success: true, message: '问题已结束' });
+  } catch (error) {
+    console.error('结束问题错误:', error);
+    res.json({ success: false, message: '操作失败' });
+  }
+});
+
+// ============ 评价查看 ============
+
+// 获取问题的回答列表
+router.get('/questions/:id/answers', (req, res) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  
+  try {
+    const answers = db.prepare(`
+      SELECT a.*, s.name as student_name, s.student_number
+      FROM answers a
+      JOIN students s ON a.student_id = s.id
+      WHERE a.question_id = ?
+      ORDER BY a.total_score DESC, a.evaluated_at ASC
+    `).all(id);
+    
+    // 解析JSON字段
+    answers.forEach(a => {
+      if (a.dimensions) {
+        try {
+          a.dimensions = JSON.parse(a.dimensions);
+        } catch (e) {}
+      }
+    });
+    
+    res.json({ success: true, data: answers });
+  } catch (error) {
+    console.error('获取回答列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 获取课堂统计数据
+router.get('/classrooms/:id/stats', (req, res) => {
+  const { id } = req.params;
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    // 验证课堂归属
+    const classroom = db.prepare('SELECT * FROM classrooms WHERE id = ? AND teacher_id = ?').get(id, user.id);
+    if (!classroom) {
+      return res.json({ success: false, message: '课堂不存在' });
+    }
+    
+    // 获取学生数量
+    const studentCount = db.prepare('SELECT COUNT(*) as count FROM classroom_students WHERE classroom_id = ?').get(id).count;
+    
+    // 获取问题列表（带回答统计）
+    const questions = db.prepare(`
+      SELECT q.*,
+             (SELECT COUNT(*) FROM answers WHERE question_id = q.id) as answer_count,
+             (SELECT AVG(total_score) FROM answers WHERE question_id = q.id) as avg_score,
+             (SELECT MAX(total_score) FROM answers WHERE question_id = q.id) as max_score,
+             (SELECT MIN(total_score) FROM answers WHERE question_id = q.id) as min_score
+      FROM questions q
+      WHERE q.classroom_id = ?
+      ORDER BY q.created_at DESC
+    `).all(id);
+    
+    // 获取维度平均分
+    const allAnswers = db.prepare(`
+      SELECT dimensions FROM answers 
+      WHERE question_id IN (SELECT id FROM questions WHERE classroom_id = ?)
+    `).all(id);
+    
+    const dimensionTotals = { perception: 0, emotion: 0, culture: 0, aesthetic: 0, expression: 0 };
+    let dimensionCount = 0;
+    
+    allAnswers.forEach(a => {
+      try {
+        const dims = JSON.parse(a.dimensions);
+        for (const key in dimensionTotals) {
+          if (dims[key] !== undefined) {
+            dimensionTotals[key] += dims[key];
+          }
+        }
+        dimensionCount++;
+      } catch (e) {}
+    });
+    
+    const dimensionAvgs = {};
+    if (dimensionCount > 0) {
+      for (const key in dimensionTotals) {
+        dimensionAvgs[key] = Math.round((dimensionTotals[key] / dimensionCount) * 10) / 10;
+      }
+    }
+    
+    // 获取所有回答（用于生成词云）
+    const allAnswerTexts = db.prepare(`
+      SELECT a.content FROM answers a
+      JOIN questions q ON a.question_id = q.id
+      WHERE q.classroom_id = ?
+    `).all(id);
+    
+    res.json({
+      success: true,
+      data: {
+        studentCount,
+        questions,
+        dimensionAvgs,
+        answerTexts: allAnswerTexts.map(a => a.content)
+      }
+    });
+  } catch (error) {
+    console.error('获取统计数据错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// ============ 学生画像 ============
+
+// 获取单个学生的素养画像
+router.get('/students/:id/profile', (req, res) => {
+  const { id } = req.params;
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    const student = db.prepare(`
+      SELECT s.*, c.name as class_name
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      WHERE s.id = ?
+    `).get(id);
+    
+    if (!student) {
+      return res.json({ success: false, message: '学生不存在' });
+    }
+    
+    // 获取最近的回答
+    const recentAnswers = db.prepare(`
+      SELECT a.*, q.content as question_content
+      FROM answers a
+      JOIN questions q ON a.question_id = q.id
+      WHERE a.student_id = ?
+      ORDER BY a.evaluated_at DESC
+      LIMIT 20
+    `).all(id);
+    
+    // 计算各维度平均分
+    const allAnswers = db.prepare('SELECT dimensions FROM answers WHERE student_id = ?').all(id);
+    
+    const dimensionTotals = { perception: 0, emotion: 0, culture: 0, aesthetic: 0, expression: 0 };
+    let dimensionCount = 0;
+    
+    allAnswers.forEach(a => {
+      try {
+        const dims = JSON.parse(a.dimensions);
+        for (const key in dimensionTotals) {
+          if (dims[key] !== undefined) {
+            dimensionTotals[key] += dims[key];
+          }
+        }
+        dimensionCount++;
+      } catch (e) {}
+    });
+    
+    const dimensionAvgs = {};
+    if (dimensionCount > 0) {
+      for (const key in dimensionTotals) {
+        dimensionAvgs[key] = Math.round((dimensionTotals[key] / dimensionCount) * 10) / 10;
+      }
+    }
+    
+    // 解析回答中的维度数据
+    recentAnswers.forEach(a => {
+      if (a.dimensions) {
+        try {
+          a.dimensions = JSON.parse(a.dimensions);
+        } catch (e) {}
+      }
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        student,
+        dimensionAvgs,
+        recentAnswers,
+        totalAnswers: allAnswers.length
+      }
+    });
+  } catch (error) {
+    console.error('获取学生画像错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// ============ 班级管理 ============
+
+// 获取教师管理的班级列表
+router.get('/my-classes', (req, res) => {
+  const user = req.session.user;
+  const db = getDatabase();
+  
+  try {
+    const classes = db.prepare(`
+      SELECT c.*, 
+             (SELECT COUNT(*) FROM students WHERE class_id = c.id) as student_count
+      FROM classes c
+      WHERE c.teacher_id = ?
+      ORDER BY c.created_at DESC
+    `).all(user.id);
+    
+    res.json({ success: true, data: classes });
+  } catch (error) {
+    console.error('获取班级列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 获取班级的学生列表
+router.get('/classes/:id/students', (req, res) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  
+  try {
+    const students = db.prepare(`
+      SELECT s.*,
+             (SELECT COUNT(*) FROM answers WHERE student_id = s.id) as answer_count,
+             (SELECT AVG(total_score) FROM answers WHERE student_id = s.id) as avg_score
+      FROM students s
+      WHERE s.class_id = ?
+      ORDER BY s.name
+    `).all(id);
+    
+    res.json({ success: true, data: students });
+  } catch (error) {
+    console.error('获取学生列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+module.exports = router;

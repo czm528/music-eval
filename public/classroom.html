@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>课堂看板 - 音乐鉴赏课评价系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="classroom-page">
+  <header class="top-header">
+    <div class="header-left">
+      <a href="/teacher" class="back-link">← 返回</a>
+      <h1 id="classroom-title">课堂看板</h1>
+    </div>
+    <div class="header-right">
+      <span id="classroom-status" class="status-badge active">进行中</span>
+      <button class="btn btn-secondary btn-sm" onclick="showQRModal()">📱 二维码</button>
+      <button class="btn btn-text" onclick="logout()">退出</button>
+    </div>
+  </header>
+  
+  <div class="classroom-container">
+    <!-- 左侧：实时数据 -->
+    <div class="realtime-panel">
+      <div class="panel-section">
+        <h3>📊 实时数据</h3>
+        <div class="realtime-stats">
+          <div class="rt-stat">
+            <span class="rt-num" id="rt-students">0</span>
+            <span class="rt-label">加入人数</span>
+          </div>
+          <div class="rt-stat">
+            <span class="rt-num" id="rt-answered">0</span>
+            <span class="rt-label">已答人数</span>
+          </div>
+          <div class="rt-stat highlight">
+            <span class="rt-num" id="rt-avg-score">0</span>
+            <span class="rt-label">平均分</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="panel-section">
+        <h3>📋 当前问题</h3>
+        <div class="current-question-display" id="current-question-display">
+          <p class="empty-state">暂无进行中的问题</p>
+        </div>
+      </div>
+      
+      <div class="panel-section">
+        <h3>👥 已加入学生</h3>
+        <div class="student-list" id="student-list">
+          <div class="loading">等待学生加入...</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 右侧：评价分析 -->
+    <div class="analysis-panel">
+      <div class="panel-section full">
+        <h3>🎯 素养维度分析</h3>
+        <div class="radar-container">
+          <canvas id="radar-chart"></canvas>
+        </div>
+      </div>
+      
+      <div class="panel-section full">
+        <h3>📈 得分分布</h3>
+        <div class="chart-container-sm">
+          <canvas id="score-chart"></canvas>
+        </div>
+      </div>
+      
+      <div class="panel-section full">
+        <h3>📝 回答详情</h3>
+        <div class="answer-list" id="answer-list">
+          <p class="empty-state">暂无回答</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 二维码弹窗 -->
+  <div id="qr-modal" class="modal">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3>邀请学生加入</h3>
+        <button class="modal-close" onclick="closeQRModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="qr-display">
+          <img id="qr-code" src="" alt="二维码">
+        </div>
+        <p class="qr-url" id="qr-url"></p>
+        <button class="btn btn-secondary btn-block" onclick="copyJoinUrl()">复制链接</button>
+      </div>
+    </div>
+  </div>
+  
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/common.js"></script>
+  <script src="/js/classroom.js"></script>
+</body>
+</html>
