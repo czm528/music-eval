@@ -10,12 +10,33 @@ const router = express.Router();
 const { getDatabase } = require('../db/init');
 const config = require('../config');
 
-// 中间件：检查教师权限
+// 中间件：检查教师权限（支持session和token两种认证方式）
 function requireTeacher(req, res, next) {
-  if (!req.session.user || req.session.user.role !== 'teacher') {
-    return res.status(401).json({ success: false, message: '无权限访问' });
+  // 优先检查session
+  if (req.session.user && req.session.user.role === 'teacher') {
+    return next();
   }
-  next();
+  
+  // 其次检查Authorization header中的token
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const decoded = Buffer.from(token, 'base64').toString();
+      // token格式: role:id:timestamp
+      const [role] = decoded.split(':');
+      if (role === 'teacher') {
+        // 从token解析出用户信息，附加到req上
+        const parts = decoded.split(':');
+        req.sessionUser = { role: parts[0], id: parseInt(parts[1]) };
+        return next();
+      }
+    } catch (e) {
+      // token解析失败，忽略
+    }
+  }
+  
+  return res.status(401).json({ success: false, message: '无权限访问' });
 }
 
 router.use(requireTeacher);
@@ -24,7 +45,7 @@ router.use(requireTeacher);
 
 // 获取教师的课堂列表
 router.get('/classrooms', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -46,7 +67,7 @@ router.get('/classrooms', (req, res) => {
 
 // 创建课堂
 router.post('/classrooms', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const { name, description, classId } = req.body;
   
   if (!name) {
@@ -81,7 +102,7 @@ router.post('/classrooms', (req, res) => {
 // 获取课堂详情
 router.get('/classrooms/:id', (req, res) => {
   const { id } = req.params;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -137,7 +158,7 @@ router.get('/classrooms/:id', (req, res) => {
 // 结束课堂
 router.post('/classrooms/:id/end', (req, res) => {
   const { id } = req.params;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -157,7 +178,7 @@ router.post('/classrooms/:id/end', (req, res) => {
 // 删除课堂
 router.delete('/classrooms/:id', (req, res) => {
   const { id } = req.params;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -182,7 +203,7 @@ router.delete('/classrooms/:id', (req, res) => {
 // 发布新问题
 router.post('/questions', (req, res) => {
   const { classroomId, content, dimension } = req.body;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -271,7 +292,7 @@ router.get('/questions/:id/answers', (req, res) => {
 // 获取课堂统计数据
 router.get('/classrooms/:id/stats', (req, res) => {
   const { id } = req.params;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -351,7 +372,7 @@ router.get('/classrooms/:id/stats', (req, res) => {
 // 获取单个学生的素养画像
 router.get('/students/:id/profile', (req, res) => {
   const { id } = req.params;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -429,7 +450,7 @@ router.get('/students/:id/profile', (req, res) => {
 
 // 获取教师管理的班级列表
 router.get('/my-classes', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {

@@ -8,12 +8,25 @@ const bcrypt = require('bcryptjs');
 const router = express.Router();
 const { getDatabase } = require('../db/init');
 
-// 中间件：检查管理员权限
+// 中间件：检查管理员权限（支持session和token两种认证方式）
 function requireAdmin(req, res, next) {
-  if (!req.session.user || req.session.user.role !== 'admin') {
-    return res.status(401).json({ success: false, message: '无权限访问' });
+  if (req.session.user && req.session.user.role === 'admin') {
+    return next();
   }
-  next();
+  
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const decoded = Buffer.from(token, 'base64').toString();
+      const [role] = decoded.split(':');
+      if (role === 'admin') {
+        return next();
+      }
+    } catch (e) {}
+  }
+  
+  return res.status(401).json({ success: false, message: '无权限访问' });
 }
 
 router.use(requireAdmin);

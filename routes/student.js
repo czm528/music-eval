@@ -9,12 +9,27 @@ const { getDatabase } = require('../db/init');
 const { evaluateWithAI } = require('../services/ai-eval');
 const keywordEval = require('../services/keyword-eval');
 
-// 中间件：检查学生权限
+// 中间件：检查学生权限（支持session和token两种认证方式）
 function requireStudent(req, res, next) {
-  if (!req.session.user || req.session.user.role !== 'student') {
-    return res.status(401).json({ success: false, message: '无权限访问' });
+  if (req.session.user && req.session.user.role === 'student') {
+    return next();
   }
-  next();
+  
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.substring(7);
+      const decoded = Buffer.from(token, 'base64').toString();
+      const [role] = decoded.split(':');
+      if (role === 'student') {
+        const parts = decoded.split(':');
+        req.sessionUser = { role: parts[0], id: parseInt(parts[1]) };
+        return next();
+      }
+    } catch (e) {}
+  }
+  
+  return res.status(401).json({ success: false, message: '无权限访问' });
 }
 
 router.use(requireStudent);
@@ -23,7 +38,7 @@ router.use(requireStudent);
 
 // 获取当前课堂信息
 router.get('/classroom', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -100,7 +115,7 @@ router.get('/classroom', (req, res) => {
 // 通过sessionId获取课堂信息
 router.get('/classroom/:sessionId', (req, res) => {
   const { sessionId } = req.params;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -173,7 +188,7 @@ router.get('/classroom/:sessionId', (req, res) => {
 // 提交回答
 router.post('/answers', async (req, res) => {
   const { questionId, content } = req.body;
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   if (!questionId || !content) {
@@ -281,7 +296,7 @@ router.post('/answers', async (req, res) => {
 
 // 获取个人信息
 router.get('/profile', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -327,7 +342,7 @@ router.get('/profile', (req, res) => {
 
 // 获取素养画像
 router.get('/competency', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
@@ -409,7 +424,7 @@ router.get('/competency', (req, res) => {
 
 // 获取历史回答
 router.get('/history', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const { page = 1, limit = 20 } = req.query;
   const offset = (page - 1) * limit;
   
@@ -457,7 +472,7 @@ router.get('/history', (req, res) => {
 
 // 获取问题的回答详情
 router.get('/answers/:questionId', (req, res) => {
-  const user = req.session.user;
+  const user = req.sessionUser || req.session.user;
   const { questionId } = req.params;
   const db = getDatabase();
   
