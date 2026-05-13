@@ -151,7 +151,7 @@ function updateStats() {
   const totalAnswers = currentClassroom.questions?.reduce((sum, q) => sum + (q.answer_count || 0), 0) || 0;
   animateNumber(document.getElementById('stat-answers'), totalAnswers);
   
-  const avgScore = currentClassroom.questions?.reduce((sum, q) => sum + (q.avg_score || 0), 0) / (currentClassroom.questions?.filter(q => q.avg_score).length || 1) || 0;
+  const avgScore = currentClassroom.questions?.reduce((sum, q) => sum + (q.normalized_avg_score || 0), 0) / (currentClassroom.questions?.filter(q => q.avg_score).length || 1) || 0;
   document.getElementById('stat-avg').textContent = avgScore.toFixed(1);
 }
 
@@ -172,7 +172,7 @@ function renderQuestions() {
     currentSection.style.display = 'block';
     currentText.textContent = currentQ.content;
     currentAnswers.textContent = currentQ.answer_count || 0;
-    currentAvg.textContent = currentQ.avg_score ? currentQ.avg_score.toFixed(1) : '0';
+    currentAvg.textContent = currentQ.normalized_avg_score ? currentQ.normalized_avg_score.toFixed(1) : '0';
   } else {
     currentSection.style.display = 'none';
   }
@@ -205,7 +205,7 @@ function renderQuestions() {
         <span class="separator">|</span>
         <span>${q.answer_count || 0} 人回答</span>
         <span class="separator">|</span>
-        <span>平均 ${q.avg_score ? q.avg_score.toFixed(1) : 0} 分</span>
+        <span>平均 ${q.normalized_avg_score ? q.normalized_avg_score.toFixed(1) : 0} 分</span>
       </div>
     </div>
   `}).join('');
@@ -324,16 +324,21 @@ function renderStudentScoresChart(studentTotalScores) {
   
   // 按总评得分降序排列
   const sorted = [...studentTotalScores].sort((a, b) => b.totalScore - a.totalScore);
-  const studentNames = sorted.map(s => s.studentName);
+  // 姓名只取姓+名的第一个字，避免X轴标签重叠
+  const studentNames = sorted.map(s => s.studentName.length > 2 ? s.studentName.substring(0, 2) : s.studentName);
   const scores = sorted.map(s => Math.round(s.totalScore * 10) / 10);
   
   if (studentScoresChart) {
     studentScoresChart.destroy();
   }
   
-  // 动态计算canvas高度：每个学生至少36px
-  const chartHeight = Math.max(400, studentNames.length * 36);
+  // 50个学生时柱状图需要足够宽，设置canvas的宽度
+  const minWidth = Math.max(600, studentNames.length * 40);
+  const canvas = document.getElementById('student-scores-chart');
   const barContainer = container.querySelector('.bar-chart-container');
+  
+  // 动态计算canvas高度：每个学生至少28px，保证50人都能显示
+  const chartHeight = Math.max(400, studentNames.length * 28);
   if (barContainer) {
     barContainer.style.height = chartHeight + 'px';
   }
@@ -393,14 +398,15 @@ function renderStudentScoresChart(studentTotalScores) {
         borderColor: barBorderColor,
         borderWidth: 1,
         borderRadius: 3,
-        barPercentage: 0.7
+        barPercentage: 0.8,
+        categoryPercentage: 0.9
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       layout: {
-        padding: { top: 10, right: 20 }
+        padding: { top: 20, right: 20 }
       },
       plugins: {
         legend: {
@@ -408,6 +414,11 @@ function renderStudentScoresChart(studentTotalScores) {
         },
         tooltip: {
           callbacks: {
+            title: function(items) {
+              // 显示完整姓名
+              const idx = items[0].dataIndex;
+              return sorted[idx].studentName;
+            },
             label: function(context) {
               const score = context.raw;
               let level = '不及格';
@@ -418,9 +429,7 @@ function renderStudentScoresChart(studentTotalScores) {
               return `${score}分 (${level})`;
             }
           }
-        },
-        // 柱顶标签
-        datalabels: false
+        }
       },
       scales: {
         y: {
@@ -438,11 +447,12 @@ function renderStudentScoresChart(studentTotalScores) {
             display: false
           },
           ticks: {
-            maxRotation: 45,
-            minRotation: 30,
+            maxRotation: 90,
+            minRotation: 45,
             font: {
-              size: 11
-            }
+              size: 10
+            },
+            autoSkip: false
           }
         }
       }
@@ -704,22 +714,22 @@ function renderDistributionChart(questions) {
     distributionChart.destroy();
   }
   
-  // 计算各分数段人数
-  const distribution = [0, 0, 0, 0, 0]; // 0-2, 2-4, 4-6, 6-8, 8-10
+  // 计算各分数段人数（使用归一化后的100分制）
+  const distribution = [0, 0, 0, 0, 0]; // 0-20, 20-40, 40-60, 60-80, 80-100
   
   questions.forEach(q => {
-    const score = q.avg_score || 0;
-    if (score < 2) distribution[0]++;
-    else if (score < 4) distribution[1]++;
-    else if (score < 6) distribution[2]++;
-    else if (score < 8) distribution[3]++;
+    const score = q.normalized_avg_score || 0;
+    if (score < 20) distribution[0]++;
+    else if (score < 40) distribution[1]++;
+    else if (score < 60) distribution[2]++;
+    else if (score < 80) distribution[3]++;
     else distribution[4]++;
   });
   
   distributionChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: ['0-2分', '2-4分', '4-6分', '6-8分', '8-10分'],
+      labels: ['0-20分', '20-40分', '40-60分', '60-80分', '80-100分'],
       datasets: [{
         label: '问题数',
         data: distribution,

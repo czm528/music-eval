@@ -322,6 +322,22 @@ router.get('/classrooms/:id/stats', (req, res) => {
       ORDER BY q.created_at DESC
     `).all(id);
     
+    // 对问题的avg_score/max_score/min_score做归一化（10分制→100分制）
+    questions.forEach(q => {
+      const dims = q.dimensions ? JSON.parse(q.dimensions) : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+      const dimCount = dims.length;
+      if (dimCount > 0 && q.avg_score !== null) {
+        // 原始avg_score是选中维度总分之和的平均，需要归一化到10分制再×10
+        q.normalized_avg_score = Math.round((q.avg_score / dimCount) * 10 * 10) / 10; // 100分制
+        q.normalized_max_score = Math.round((q.max_score / dimCount) * 10 * 10) / 10;
+        q.normalized_min_score = Math.round((q.min_score / dimCount) * 10 * 10) / 10;
+      } else {
+        q.normalized_avg_score = 0;
+        q.normalized_max_score = 0;
+        q.normalized_min_score = 0;
+      }
+    });
+    
     // 获取维度平均分（只计算选中维度的得分）
     const allAnswers = db.prepare(`
       SELECT a.dimensions, a.total_score, q.dimensions as question_dimensions

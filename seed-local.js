@@ -439,10 +439,19 @@ async function seed(externalDb) {
     console.log(`已有班级: ${classInfo.name} (ID: ${classInfo.id})`);
   }
   
-  // 4. 创建课堂
+  // 4. 创建课堂（如果已存在则跳过）
   console.log('\n【4/6】创建测试课堂...');
-  const sessionId = uuidv4().replace(/-/g, '').substring(0, 12);
   const classroomName = '贝多芬音乐鉴赏专题';
+  
+  let existingClassroom = db.prepare("SELECT * FROM classrooms WHERE name = ? AND teacher_id = ?").get(classroomName, teacher.id);
+  
+  if (existingClassroom) {
+    console.log(`课堂已存在: ${classroomName} (ID: ${existingClassroom.id})，跳过创建`);
+    console.log('\n✨ 模拟数据已存在，无需重复灌入！');
+    return;
+  }
+  
+  const sessionId = uuidv4().replace(/-/g, '').substring(0, 12);
   const classroomDesc = '深入了解贝多芬的经典作品，培养音乐鉴赏能力';
   
   const classroomResult = db.prepare(`
@@ -494,7 +503,18 @@ async function seed(externalDb) {
   const insertStudent = db.prepare('INSERT INTO students (student_number, name, class_id) VALUES (?, ?, ?)');
   const insertClassroomStudent = db.prepare('INSERT INTO classroom_students (classroom_id, student_id) VALUES (?, ?)');
   
-  const students = [...existingStudents];
+  const students = [];
+  
+  // 先将已有学生加入课堂
+  for (const s of existingStudents) {
+    students.push({ id: s.id, studentNumber: s.student_number, name: s.name });
+    // 确保已有学生也加入课堂
+    try {
+      insertClassroomStudent.run(classroomId, s.id);
+    } catch (e) {
+      // 可能已存在，忽略
+    }
+  }
   
   // 如果学生数量不够，补充创建
   const insertNewStudents = db.transaction(() => {
