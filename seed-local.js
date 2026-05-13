@@ -439,28 +439,56 @@ async function seed(externalDb) {
     console.log(`已有班级: ${classInfo.name} (ID: ${classInfo.id})`);
   }
   
-  // 4. 创建课堂（如果已存在则跳过）
-  console.log('\n【4/6】创建测试课堂...');
+  // 4. 创建或复用课堂
+  console.log('\n【4/6】准备测试课堂...');
   const classroomName = '贝多芬音乐鉴赏专题';
+  const classroomDesc = '深入了解贝多芬的经典作品，培养音乐鉴赏能力';
   
   let existingClassroom = db.prepare("SELECT * FROM classrooms WHERE name = ? AND teacher_id = ?").get(classroomName, teacher.id);
   
+  let classroomId, sessionId;
+  
   if (existingClassroom) {
-    console.log(`课堂已存在: ${classroomName} (ID: ${existingClassroom.id})，跳过创建`);
-    console.log('\n✨ 模拟数据已存在，无需重复灌入！');
-    return;
+    classroomId = existingClassroom.id;
+    sessionId = existingClassroom.session_id;
+    console.log(`课堂已存在: ${classroomName} (ID: ${classroomId})，复用现有课堂`);
+    
+    // 修复：确保所有学生都加入了 classroom_students
+    const studentsInClassroom = db.prepare('SELECT student_id FROM classroom_students WHERE classroom_id = ?').all(classroomId);
+    const existingStudentIds = new Set(studentsInClassroom.map(s => s.student_id));
+    
+    const allStudents = db.prepare('SELECT id FROM students WHERE class_id = ?').all(classInfo.id);
+    let added = 0;
+    for (const s of allStudents) {
+      if (!existingStudentIds.has(s.id)) {
+        try {
+          db.prepare('INSERT INTO classroom_students (classroom_id, student_id) VALUES (?, ?)').run(classroomId, s.id);
+          added++;
+        } catch(e) {}
+      }
+    }
+    if (added > 0) console.log(`  修复: 为 ${added} 名学生补充了课堂关联记录`);
+    
+    // 检查是否已有问题和回答
+    const existingQuestions = db.prepare('SELECT COUNT(*) as count FROM questions WHERE classroom_id = ?').get(classroomId).count;
+    const existingAnswers = db.prepare(`SELECT COUNT(*) as count FROM answers a JOIN questions q ON a.question_id = q.id WHERE q.classroom_id = ?`).get(classroomId).count;
+    
+    if (existingQuestions > 0 && existingAnswers > 0) {
+      console.log(`  已有 ${existingQuestions} 道问题, ${existingAnswers} 条回答，数据完整，跳过创建`);
+      console.log('\n✨ 模拟数据已就绪！');
+      return;
+    }
+    
+    console.log('  课堂存在但缺少问题/回答数据，继续创建...');
+  } else {
+    sessionId = uuidv4().replace(/-/g, '').substring(0, 12);
+    const classroomResult = db.prepare(`
+      INSERT INTO classrooms (session_id, name, description, teacher_id, class_id, status)
+      VALUES (?, ?, ?, ?, ?, 'active')
+    `).run(sessionId, classroomName, classroomDesc, teacher.id, classInfo.id);
+    classroomId = classroomResult.lastInsertRowid;
+    console.log(`已创建课堂: ${classroomName} (ID: ${classroomId}, Session: ${sessionId})`);
   }
-  
-  const sessionId = uuidv4().replace(/-/g, '').substring(0, 12);
-  const classroomDesc = '深入了解贝多芬的经典作品，培养音乐鉴赏能力';
-  
-  const classroomResult = db.prepare(`
-    INSERT INTO classrooms (session_id, name, description, teacher_id, class_id, status)
-    VALUES (?, ?, ?, ?, ?, 'active')
-  `).run(sessionId, classroomName, classroomDesc, teacher.id, classInfo.id);
-  
-  const classroomId = classroomResult.lastInsertRowid;
-  console.log(`已创建课堂: ${classroomName} (ID: ${classroomId}, Session: ${sessionId})`);
   
   // 5. 创建问题
   console.log('\n【5/6】创建4道问题...');
