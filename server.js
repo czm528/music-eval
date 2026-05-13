@@ -17,6 +17,49 @@ const { initDatabase, insertSampleData, getDatabase } = require('./db/init');
 initDatabase();
 insertSampleData();
 
+// 清理重复的模拟课堂（只保留最新的一个）
+try {
+  const db = getDatabase();
+  const duplicates = db.prepare(`
+    SELECT name, teacher_id, COUNT(*) as cnt 
+    FROM classrooms 
+    WHERE name = '贝多芬音乐鉴赏专题'
+    GROUP BY name, teacher_id 
+    HAVING cnt > 1
+  `).all();
+  
+  if (duplicates.length > 0) {
+    // 保留最新的那个，删除其余的
+    const toDelete = db.prepare(`
+      SELECT id FROM classrooms 
+      WHERE name = '贝多芬音乐鉴赏专题' 
+      AND id NOT IN (
+        SELECT MAX(id) FROM classrooms WHERE name = '贝多芬音乐鉴赏专题'
+      )
+    `).all();
+    
+    if (toDelete.length > 0) {
+      const deleteOld = db.prepare('DELETE FROM classrooms WHERE id = ?');
+      const deleteAnswers = db.prepare(`DELETE FROM answers WHERE question_id IN (SELECT id FROM questions WHERE classroom_id = ?)`);
+      const deleteQuestions = db.prepare('DELETE FROM questions WHERE classroom_id = ?');
+      const deleteCS = db.prepare('DELETE FROM classroom_students WHERE classroom_id = ?');
+      
+      db.transaction(() => {
+        for (const row of toDelete) {
+          deleteAnswers.run(row.id);
+          deleteQuestions.run(row.id);
+          deleteCS.run(row.id);
+          deleteOld.run(row.id);
+        }
+      })();
+      
+      console.log(`已清理 ${toDelete.length} 个重复的模拟课堂`);
+    }
+  }
+} catch(e) {
+  console.error('清理重复课堂失败:', e.message);
+}
+
 // 创建Express应用
 const app = express();
 

@@ -327,15 +327,15 @@ router.get('/classrooms/:id/stats', (req, res) => {
       ORDER BY q.created_at DESC
     `).all(id);
     
-    // 对问题的avg_score/max_score/min_score做归一化（10分制→100分制）
+    // 对问题的avg_score/max_score/min_score做归一化（按维度满分计算百分制）
     questions.forEach(q => {
       const dims = q.dimensions ? JSON.parse(q.dimensions) : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
       const dimCount = dims.length;
+      const maxScore = dimCount * 10; // 该题满分
       if (dimCount > 0 && q.avg_score !== null) {
-        // 原始avg_score是选中维度总分之和的平均，需要归一化到10分制再×10
-        q.normalized_avg_score = Math.round((q.avg_score / dimCount) * 10 * 10) / 10; // 100分制
-        q.normalized_max_score = Math.round((q.max_score / dimCount) * 10 * 10) / 10;
-        q.normalized_min_score = Math.round((q.min_score / dimCount) * 10 * 10) / 10;
+        q.normalized_avg_score = Math.round((q.avg_score / maxScore) * 100 * 10) / 10;
+        q.normalized_max_score = Math.round((q.max_score / maxScore) * 100 * 10) / 10;
+        q.normalized_min_score = Math.round((q.min_score / maxScore) * 100 * 10) / 10;
       } else {
         q.normalized_avg_score = 0;
         q.normalized_max_score = 0;
@@ -398,7 +398,7 @@ router.get('/classrooms/:id/stats', (req, res) => {
         ORDER BY a.student_id, a.question_id
       `).all(id);
       
-      // 按学生分组
+      // 按学生分组，计算每个学生的每题得分率
       const answersByStudent = {};
       studentAnswers.forEach(a => {
         if (!answersByStudent[a.student_id]) {
@@ -406,6 +406,17 @@ router.get('/classrooms/:id/stats', (req, res) => {
         }
         answersByStudent[a.student_id].push(a);
       });
+      
+      // 先计算每道题的维度满分（用于归一化）
+      // 每个维度满分10分，每题满分 = 维度数 * 10
+      const questionMaxScores = {};
+      questions.forEach(q => {
+        const dims = q.dimensions ? JSON.parse(q.dimensions) : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+        questionMaxScores[q.id] = dims.length * 10;
+      });
+      
+      // 每题权重：100分 / 题目数
+      const questionWeight = 100 / questionCount;
       
       // 计算每个学生的课堂总评
       for (const student of students) {
@@ -421,43 +432,42 @@ router.get('/classrooms/:id/stats', (req, res) => {
           continue;
         }
         
-        // 每道题的归一化得分之和
-        let normalizedSum = 0;
+        // 每道题的得分率 × 题目权重，求和得到总评
+        let totalScore = 0;
         let validAnswerCount = 0;
         
         for (const answer of answers) {
           try {
             const dims = JSON.parse(answer.dimensions);
             const questionDims = answer.question_dimensions ? JSON.parse(answer.question_dimensions) : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+            const maxScore = questionMaxScores[answer.question_id] || 50;
             
-            // 计算该题选中维度的平均分（10分制）
+            // 计算该题选中维度的得分之和
             let dimSum = 0;
-            let dimCount = 0;
             for (const dim of questionDims) {
               if (dims[dim] !== undefined) {
                 dimSum += dims[dim];
-                dimCount++;
               }
             }
             
-            if (dimCount > 0) {
-              const normalizedScore = (dimSum / dimCount); // 直接是10分制
-              normalizedSum += normalizedScore;
-              validAnswerCount++;
-            }
+            // 得分率 = 实际分 / 该题满分
+            const scoreRate = dimSum / maxScore;
+            // 该题贡献 = 得分率 × 题目权重
+            totalScore += scoreRate * questionWeight;
+            validAnswerCount++;
           } catch (e) {}
         }
         
-        // 课堂总评 = 归一化得分的平均 * 10 = 100分制
-        const totalScore = validAnswerCount > 0 
-          ? Math.round((normalizedSum / validAnswerCount) * 10) 
+        // 如果学生没回答所有题目，按实际回答数按比例计算
+        const finalScore = validAnswerCount > 0 
+          ? Math.round((totalScore / validAnswerCount * questionCount) * 10) / 10
           : 0;
         
         studentTotalScores.push({
           studentId: student.id,
           studentName: student.name,
           studentNumber: student.student_number,
-          totalScore,
+          totalScore: finalScore,
           questionCount: validAnswerCount
         });
       }
