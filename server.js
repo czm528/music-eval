@@ -22,7 +22,8 @@ if (process.env.SEED_MOCK_DATA === 'true') {
   console.log('🔄 检测到 SEED_MOCK_DATA=true，正在灌入模拟数据...');
   try {
     const { seed } = require('./seed-local');
-    seed().then(() => {
+    const db = getDatabase();
+    seed(db).then(() => {
       console.log('✅ 模拟数据灌入完成！');
     }).catch(err => {
       console.error('❌ 模拟数据灌入失败:', err.message);

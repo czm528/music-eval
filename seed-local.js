@@ -16,21 +16,11 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-// 数据库路径
-const dbPath = path.join(__dirname, 'db', 'music-eval.db');
-const dbDir = path.dirname(dbPath);
-
-// 确保数据库目录存在
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-}
-
-// 打开数据库
-const db = new Database(dbPath);
-db.pragma('foreign_keys = ON');
-
 // 导入关键词评分
 const { evaluateWithKeywords, musicKeywords } = require('./db/music-keywords');
+
+// 数据库路径（仅独立运行时使用）
+const dbPath = path.join(__dirname, 'db', 'music-eval.db');
 
 // ============ 配置 ============
 
@@ -170,7 +160,7 @@ const ANSWER_TEMPLATES = [ANSWER_TEMPLATES_Q1, ANSWER_TEMPLATES_Q2, ANSWER_TEMPL
 
 // ============ 初始化数据库 ============
 
-function initDatabase() {
+function initDatabase(db) {
   console.log('正在检查数据库表结构...');
   
   // 创建管理员表
@@ -355,7 +345,7 @@ function varyAnswer(answer, variationIndex) {
 }
 
 // 更新学生素养记录
-function updateCompetencyRecord(studentId, dimensions, selectedDimensions) {
+function updateCompetencyRecord(db, studentId, dimensions, selectedDimensions) {
   const targetDimensions = selectedDimensions || Object.keys(dimensions);
   
   for (const [dimension, score] of Object.entries(dimensions)) {
@@ -388,14 +378,30 @@ function updateCompetencyRecord(studentId, dimensions, selectedDimensions) {
 
 // ============ 主函数 ============
 
-async function seed() {
+async function seed(externalDb) {
+  // 如果外部传入了数据库连接则使用，否则自己打开
+  let db;
+  let ownConnection = false;
+  
+  if (externalDb) {
+    db = externalDb;
+  } else {
+    const dbDir = path.dirname(dbPath);
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+    db = new Database(dbPath);
+    db.pragma('foreign_keys = ON');
+    ownConnection = true;
+  }
+  
   console.log('========================================');
   console.log('音乐鉴赏评价系统 - 数据填充脚本');
   console.log('========================================\n');
   
   // 1. 初始化数据库表
   console.log('【1/6】初始化数据库表结构...');
-  initDatabase();
+  initDatabase(db);
   
   // 2. 确保有教师数据
   console.log('\n【2/6】检查教师数据...');
@@ -557,7 +563,7 @@ async function seed() {
         );
         
         // 更新素养记录
-        updateCompetencyRecord(student.id, evalResult.dimensions, question.dimensions);
+        updateCompetencyRecord(db, student.id, evalResult.dimensions, question.dimensions);
         
         answerIndex++;
       }
@@ -600,10 +606,13 @@ async function seed() {
   console.log('\n📁 数据库文件:');
   console.log(`  • ${dbPath}`);
   
-  // 关闭数据库连接
-  db.close();
-  
-  console.log('\n✨ 请重启服务以加载新数据！');
+  // 关闭数据库连接（仅在自己打开的情况下）
+  if (ownConnection) {
+    db.close();
+    console.log('\n✨ 请重启服务以加载新数据！');
+  } else {
+    console.log('\n✨ 模拟数据已灌入当前数据库！');
+  }
 }
 
 // 支持两种使用方式：
