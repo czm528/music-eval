@@ -17,6 +17,21 @@ const { initDatabase, insertSampleData, getDatabase } = require('./db/init');
 initDatabase();
 insertSampleData();
 
+// 如果设置了 SEED_MOCK_DATA 环境变量，自动灌入模拟数据
+if (process.env.SEED_MOCK_DATA === 'true') {
+  console.log('🔄 检测到 SEED_MOCK_DATA=true，正在灌入模拟数据...');
+  try {
+    const { seed } = require('./seed-local');
+    seed().then(() => {
+      console.log('✅ 模拟数据灌入完成！');
+    }).catch(err => {
+      console.error('❌ 模拟数据灌入失败:', err.message);
+    });
+  } catch (err) {
+    console.error('❌ 加载seed-local模块失败:', err.message);
+  }
+}
+
 // 创建Express应用
 const app = express();
 
