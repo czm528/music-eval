@@ -19,6 +19,10 @@ insertSampleData();
 
 // 创建Express应用
 const app = express();
+
+// 信任反向代理（Zeabur等云平台使用HTTPS代理，Express需信任才能正确设置cookie）
+app.set('trust proxy', 1);
+
 const server = http.createServer(app);
 
 // 配置Socket.io
