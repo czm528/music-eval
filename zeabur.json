@@ -1,0 +1,8 @@
+{
+  "services": [
+    {
+      "name": "audio-service",
+      "dir": "/audio-service"
+    }
+  ]
+}
