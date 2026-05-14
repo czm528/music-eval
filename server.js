@@ -8,6 +8,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const session = require('express-session');
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
 // 加载配置
 const config = require('./config');
@@ -84,6 +86,39 @@ app.use(session({
 
 // 静态文件服务
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 音频文件上传配置
+const audioStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = './uploads/audio';
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.webm';
+    cb(null, `${Date.now()}-${Math.random().toString(36).substr(2, 6)}${ext}`);
+  }
+});
+
+const audioUpload = multer({ 
+  storage: audioStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.wav', '.mp3', '.ogg', '.webm', '.m4a', '.aac'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext) || file.mimetype.startsWith('audio/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('只支持音频文件'));
+    }
+  }
+});
+
+// 静态文件服务 - 音频文件
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// 把 audioUpload 挂到 app 上供路由使用
+app.set('audioUpload', audioUpload);
 
 // 路由配置
 const authRoutes = require('./routes/auth');

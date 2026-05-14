@@ -52,10 +52,44 @@
       <div id="answer-status" class="answer-status">
         <!-- 未回答时显示答题表单 -->
         <div id="answer-form-section" class="answer-form-section">
-          <textarea id="answer-input" placeholder="请在这里输入您的回答..." rows="6"></textarea>
-          <button class="btn btn-primary btn-block btn-lg" onclick="submitAnswer()">
-            提交回答
-          </button>
+          <!-- 文字回答模式 -->
+          <div id="text-answer-area">
+            <textarea id="answer-input" placeholder="请在这里输入您的回答..." rows="6"></textarea>
+            <button class="btn btn-primary btn-block btn-lg" onclick="submitAnswer()">
+              提交回答
+            </button>
+          </div>
+          
+          <!-- 音频回答模式（音频题时显示） -->
+          <div id="audio-answer-area" style="display: none;">
+            <div class="recorder-container">
+              <div class="recorder-visual" id="recorder-visual">
+                <div class="recorder-ring" id="recorder-ring">
+                  <div class="recorder-btn" id="recorder-btn" onclick="toggleRecording()">
+                    <span class="recorder-icon" id="recorder-icon">🎤</span>
+                  </div>
+                </div>
+                <div class="recorder-status" id="recorder-status">点击开始录音</div>
+                <div class="recorder-timer" id="recorder-timer" style="display: none;">00:00</div>
+              </div>
+              
+              <!-- 试听区域 -->
+              <div class="audio-preview" id="audio-answer-preview" style="display: none;">
+                <audio id="student-audio-preview" controls style="width: 100%;"></audio>
+                <button class="btn btn-sm" onclick="reRecord()" style="margin-top: 8px;">重新录音</button>
+              </div>
+              
+              <!-- 参考旋律播放 -->
+              <div class="reference-audio-section" id="reference-audio-section" style="display: none;">
+                <h4>🎵 参考旋律</h4>
+                <audio id="reference-audio-player" controls style="width: 100%;"></audio>
+              </div>
+              
+              <button class="btn btn-primary btn-block btn-lg" id="submit-audio-btn" onclick="submitAudioAnswer()" style="display: none;">
+                提交演唱
+              </button>
+            </div>
+          </div>
         </div>
         
         <!-- 已回答时显示结果 -->

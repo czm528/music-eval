@@ -15,6 +15,9 @@ let isLoadingClassroom = false; // 防止重复点击
 let allStudentTotalScores = [];
 let totalScoresCurrentPage = 1;
 const totalScoresPageSize = 10;
+// 音频题相关变量
+let selectedQuestionType = 'text';
+let selectedAudioFile = null;
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -260,33 +263,51 @@ async function publishQuestion() {
     return;
   }
   
+  if (selectedQuestionType === 'audio' && !selectedAudioFile) {
+    showToast('音准题需要上传参考旋律');
+    return;
+  }
+  
   const publishBtn = document.querySelector('.question-panel .btn-primary');
   publishBtn.disabled = true;
   publishBtn.textContent = '发布中...';
   
   try {
-    const res = await apiRequest('/api/teacher/questions', {
+    const formData = new FormData();
+    formData.append('classroomId', currentClassroom.id);
+    formData.append('content', content);
+    formData.append('dimensions', JSON.stringify(dimensions));
+    formData.append('questionType', selectedQuestionType);
+    
+    if (selectedAudioFile) {
+      formData.append('reference_audio', selectedAudioFile);
+    }
+    
+    const token = getToken();
+    const res = await fetch('/api/teacher/questions', {
       method: 'POST',
-      body: {
-        classroomId: currentClassroom.id,
-        content: content,
-        dimensions: dimensions
-      }
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
     });
+    
+    const data = await res.json();
     
     publishBtn.disabled = false;
     publishBtn.textContent = '发布问题';
     
-    if (res.success) {
+    if (data.success) {
       showToast('问题已发布');
       document.getElementById('question-content').value = '';
+      removeAudio();
       // 重置复选框为全选
       document.querySelectorAll('input[name="dimensions"]').forEach(cb => cb.checked = true);
+      // 重置题目类型
+      switchQuestionType('text');
       
       // 刷新课堂数据
       selectClassroom(currentClassroom.id);
     } else {
-      showToast(res.message || '发布失败');
+      showToast(data.message || '发布失败');
     }
   } catch (error) {
     console.error('发布问题错误:', error);
@@ -294,6 +315,41 @@ async function publishQuestion() {
     publishBtn.textContent = '发布问题';
     showToast('网络错误');
   }
+}
+
+// 切换题目类型
+function switchQuestionType(type) {
+  selectedQuestionType = type;
+  const audioGroup = document.getElementById('audio-upload-group');
+  const textArea = document.getElementById('question-content');
+  
+  if (type === 'audio') {
+    audioGroup.style.display = '';
+    textArea.placeholder = '请描述演唱要求（如：请演唱《欢乐颂》主题旋律）';
+  } else {
+    audioGroup.style.display = 'none';
+    textArea.placeholder = '请输入音乐鉴赏问题，例如：\n请描述这段音乐的速度、力度和情感特点';
+  }
+}
+
+// 处理音频上传
+function handleAudioUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  selectedAudioFile = file;
+  document.getElementById('upload-hint').style.display = 'none';
+  document.getElementById('upload-preview').style.display = '';
+  document.getElementById('audio-filename').textContent = file.name;
+  document.getElementById('audio-preview-player').src = URL.createObjectURL(file);
+}
+
+// 移除音频
+function removeAudio() {
+  selectedAudioFile = null;
+  document.getElementById('reference-audio-input').value = '';
+  document.getElementById('upload-hint').style.display = '';
+  document.getElementById('upload-preview').style.display = 'none';
 }
 
 // 加载课堂统计数据

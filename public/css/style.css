@@ -2329,3 +2329,170 @@ textarea {
   font-size: 13px;
   color: var(--text-muted);
 }
+/* ============ 题目类型选择 ============ */
+.type-selector {
+  display: flex;
+  gap: 12px;
+  margin-bottom: var(--space);
+}
+
+.type-option {
+  flex: 1;
+  cursor: pointer;
+}
+
+.type-option input {
+  display: none;
+}
+
+.type-label {
+  display: block;
+  padding: 10px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius);
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.type-option input:checked + .type-label {
+  border-color: var(--primary-color);
+  background: var(--primary-bg);
+  color: var(--primary-color);
+}
+
+/* ============ 音频上传区域 ============ */
+.audio-upload-area {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: var(--space);
+}
+
+.audio-upload-area:hover {
+  border-color: var(--primary-color);
+  background: var(--primary-bg);
+}
+
+.upload-icon {
+  font-size: 32px;
+  display: block;
+  margin-bottom: var(--space-sm);
+}
+
+.upload-hint p {
+  margin: 4px 0;
+}
+
+.upload-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.upload-preview {
+  padding: var(--space-sm);
+  background: var(--bg-light);
+  border-radius: var(--radius);
+}
+
+.upload-preview > span:first-child {
+  margin-right: 8px;
+}
+
+.upload-preview > span:nth-child(2) {
+  font-weight: 500;
+}
+
+/* ============ 录音器 ============ */
+.recorder-container {
+  text-align: center;
+  padding: var(--space);
+}
+
+.recorder-visual {
+  margin-bottom: var(--space);
+}
+
+.recorder-ring {
+  display: inline-block;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 3px solid var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto var(--space-sm);
+  transition: all 0.3s;
+}
+
+.recorder-ring.recording {
+  border-color: #ef4444;
+  animation: pulse 1.5s infinite;
+  box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.recorder-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.recorder-btn:hover {
+  transform: scale(1.05);
+}
+
+.recorder-ring.recording .recorder-btn {
+  background: #ef4444;
+}
+
+.recorder-icon {
+  font-size: 24px;
+}
+
+.recorder-status {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: var(--space-sm);
+}
+
+.recorder-timer {
+  font-size: 20px;
+  font-weight: 600;
+  color: #ef4444;
+  margin-top: 4px;
+}
+
+.audio-preview {
+  margin: var(--space) 0;
+  padding: var(--space);
+  background: var(--bg-light);
+  border-radius: var(--radius);
+}
+
+.reference-audio-section {
+  margin: var(--space) 0;
+  padding: var(--space);
+  background: #fffbeb;
+  border-radius: var(--radius);
+  border: 1px solid #fbbf24;
+}
+
+.reference-audio-section h4 {
+  margin-bottom: 8px;
+  font-size: 14px;
+}

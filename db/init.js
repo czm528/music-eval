@@ -128,6 +128,8 @@ function initDatabase() {
       classroom_id INTEGER NOT NULL,
       content TEXT NOT NULL,
       dimensions TEXT,
+      question_type TEXT DEFAULT 'text',
+      reference_audio TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       ended_at DATETIME,
       FOREIGN KEY (classroom_id) REFERENCES classrooms(id)
@@ -241,6 +243,29 @@ function migrateDatabase() {
       db.prepare("UPDATE questions SET dimensions = ? WHERE dimensions IS NULL").run(defaultDimensions);
     } catch (e) {
       console.log('dimensions列已存在或无需迁移');
+    }
+  }
+  
+  // 迁移：添加音频相关字段
+  const questionsColumns = db.prepare("PRAGMA table_info(questions)").all().map(c => c.name);
+  const answersColumns = db.prepare("PRAGMA table_info(answers)").all().map(c => c.name);
+  
+  const migrations = [
+    { table: 'questions', column: 'question_type', checkCols: questionsColumns, type: 'TEXT DEFAULT "text"' },
+    { table: 'questions', column: 'reference_audio', checkCols: questionsColumns, type: 'TEXT DEFAULT NULL' },
+    { table: 'answers', column: 'audio_file', checkCols: answersColumns, type: 'TEXT DEFAULT NULL' },
+    { table: 'answers', column: 'pitch_score', checkCols: answersColumns, type: 'REAL DEFAULT NULL' },
+    { table: 'answers', column: 'pitch_deviation', checkCols: answersColumns, type: 'REAL DEFAULT NULL' },
+  ];
+  
+  for (const m of migrations) {
+    if (!m.checkCols.includes(m.column)) {
+      try {
+        db.exec(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type}`);
+        console.log(`数据库迁移：${m.table} 表添加了 ${m.column} 字段`);
+      } catch (e) {
+        // 列已存在，忽略
+      }
     }
   }
   

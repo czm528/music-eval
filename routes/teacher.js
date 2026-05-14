@@ -213,52 +213,65 @@ router.delete('/classrooms/:id', (req, res) => {
 
 // ============ 问题管理 ============
 
-// 发布新问题
+// 发布新问题（支持音频题）
 router.post('/questions', (req, res) => {
-  const { classroomId, content, dimensions } = req.body;
-  const user = req.sessionUser || req.session.user;
-  const db = getDatabase();
+  const audioUpload = req.app.get('audioUpload');
   
-  try {
-    // 验证课堂归属
-    const classroom = db.prepare('SELECT * FROM classrooms WHERE id = ? AND teacher_id = ?').get(classroomId, user.id);
-    if (!classroom) {
-      return res.json({ success: false, message: '课堂不存在' });
+  audioUpload.single('reference_audio')(req, res, (err) => {
+    if (err) {
+      return res.json({ success: false, message: '文件上传失败: ' + err.message });
     }
     
-    if (classroom.status !== 'active') {
-      return res.json({ success: false, message: '课堂已结束，无法发布问题' });
-    }
+    const { classroomId, content, dimensions, questionType } = req.body;
+    const user = req.sessionUser || req.session.user;
+    const db = getDatabase();
     
-    // 至少选择一个维度
-    if (!dimensions || dimensions.length === 0) {
-      return res.json({ success: false, message: '请至少选择一个评分维度' });
-    }
-    
-    const result = db.prepare('INSERT INTO questions (classroom_id, content, dimensions) VALUES (?, ?, ?)').run(
-      classroomId, content, JSON.stringify(dimensions)
-    );
-    
-    // 通过Socket.io广播新问题
-    const io = req.app.get('io');
-    if (io) {
-      io.to(`classroom:${classroomId}`).emit('new-question', {
-        questionId: result.lastInsertRowid,
-        content,
-        dimensions,
-        createdAt: new Date().toISOString()
+    try {
+      // 验证课堂归属
+      const classroom = db.prepare('SELECT * FROM classrooms WHERE id = ? AND teacher_id = ?').get(classroomId, user.id);
+      if (!classroom) {
+        return res.json({ success: false, message: '课堂不存在' });
+      }
+      
+      if (classroom.status !== 'active') {
+        return res.json({ success: false, message: '课堂已结束，无法发布问题' });
+      }
+      
+      // 至少选择一个维度
+      if (!dimensions || dimensions.length === 0) {
+        return res.json({ success: false, message: '请至少选择一个评分维度' });
+      }
+      
+      const type = questionType || 'text';
+      const refAudio = req.file ? `/uploads/audio/${req.file.filename}` : null;
+      
+      const result = db.prepare(
+        'INSERT INTO questions (classroom_id, content, dimensions, question_type, reference_audio) VALUES (?, ?, ?, ?, ?)'
+      ).run(classroomId, content, JSON.stringify(dimensions), type, refAudio);
+      
+      // 通过Socket.io广播新问题
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`classroom:${classroomId}`).emit('new-question', {
+          questionId: result.lastInsertRowid,
+          content,
+          dimensions,
+          questionType: type,
+          referenceAudio: refAudio,
+          createdAt: new Date().toISOString()
+        });
+      }
+      
+      res.json({
+        success: true,
+        message: '问题已发布',
+        data: { id: result.lastInsertRowid, questionType: type, referenceAudio: refAudio }
       });
+    } catch (error) {
+      console.error('发布问题错误:', error);
+      res.json({ success: false, message: '发布失败' });
     }
-    
-    res.json({
-      success: true,
-      message: '问题已发布',
-      data: { id: result.lastInsertRowid }
-    });
-  } catch (error) {
-    console.error('发布问题错误:', error);
-    res.json({ success: false, message: '发布失败' });
-  }
+  });
 });
 
 // 结束当前问题
@@ -866,25 +879,3 @@ router.get('/my-classes', (req, res) => {
 });
 
 // 获取班级的学生列表
-router.get('/classes/:id/students', (req, res) => {
-  const { id } = req.params;
-  const db = getDatabase();
-  
-  try {
-    const students = db.prepare(`
-      SELECT s.*,
-             (SELECT COUNT(*) FROM answers WHERE student_id = s.id) as answer_count,
-             (SELECT AVG(total_score) FROM answers WHERE student_id = s.id) as avg_score
-      FROM students s
-      WHERE s.class_id = ?
-      ORDER BY s.name
-    `).all(id);
-    
-    res.json({ success: true, data: students });
-  } catch (error) {
-    console.error('获取学生列表错误:', error);
-    res.json({ success: false, message: '获取失败' });
-  }
-});
-
-module.exports = router;

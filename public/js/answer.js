@@ -187,6 +187,11 @@ function showAnswerForm() {
   document.getElementById('answer-form-section').classList.remove('hidden');
   document.getElementById('answer-result-section').classList.add('hidden');
   document.getElementById('answer-input').value = '';
+  
+  // 根据问题类型切换UI
+  if (currentQuestion) {
+    checkQuestionType(currentQuestion);
+  }
 }
 
 function showAnswerResult(answer) {
@@ -369,6 +374,156 @@ function startPollingResult(questionId) {
 // 刷新问题
 function refreshQuestion() {
   loadClassroomData();
+}
+
+// ============ 音频题录音功能 ============
+
+// 录音相关变量
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let recordingTimer = null;
+let recordingSeconds = 0;
+let recordedBlob = null;
+
+// 检查当前问题类型，切换UI
+function checkQuestionType(question) {
+  const textArea = document.getElementById('text-answer-area');
+  const audioArea = document.getElementById('audio-answer-area');
+  const refSection = document.getElementById('reference-audio-section');
+  
+  // 文字题默认显示
+  if (question.question_type === 'audio') {
+    textArea.style.display = 'none';
+    audioArea.style.display = '';
+    
+    if (question.reference_audio) {
+      refSection.style.display = '';
+      document.getElementById('reference-audio-player').src = question.reference_audio;
+    }
+  } else {
+    textArea.style.display = '';
+    audioArea.style.display = 'none';
+  }
+}
+
+// 录音控制
+async function toggleRecording() {
+  if (isRecording) {
+    stopRecording();
+  } else {
+    await startRecording();
+  }
+}
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+    audioChunks = [];
+    
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunks.push(e.data);
+    };
+    
+    mediaRecorder.onstop = () => {
+      recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const url = URL.createObjectURL(recordedBlob);
+      document.getElementById('student-audio-preview').src = url;
+      document.getElementById('audio-answer-preview').style.display = '';
+      document.getElementById('submit-audio-btn').style.display = '';
+      
+      // 停止所有轨道
+      stream.getTracks().forEach(t => t.stop());
+    };
+    
+    mediaRecorder.start();
+    isRecording = true;
+    recordingSeconds = 0;
+    
+    // UI更新
+    document.getElementById('recorder-icon').textContent = '⏹';
+    document.getElementById('recorder-status').textContent = '录音中...点击停止';
+    document.getElementById('recorder-ring').classList.add('recording');
+    document.getElementById('recorder-timer').style.display = '';
+    
+    recordingTimer = setInterval(() => {
+      recordingSeconds++;
+      const m = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+      const s = String(recordingSeconds % 60).padStart(2, '0');
+      document.getElementById('recorder-timer').textContent = `${m}:${s}`;
+      
+      if (recordingSeconds >= 60) { // 最长60秒
+        stopRecording();
+      }
+    }, 1000);
+    
+  } catch (e) {
+    showToast('无法访问麦克风，请检查权限设置');
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && isRecording) {
+    mediaRecorder.stop();
+    isRecording = false;
+    
+    clearInterval(recordingTimer);
+    document.getElementById('recorder-icon').textContent = '🎤';
+    document.getElementById('recorder-status').textContent = '录音完成';
+    document.getElementById('recorder-ring').classList.remove('recording');
+  }
+}
+
+function reRecord() {
+  recordedBlob = null;
+  document.getElementById('audio-answer-preview').style.display = 'none';
+  document.getElementById('submit-audio-btn').style.display = 'none';
+  document.getElementById('recorder-status').textContent = '点击开始录音';
+  document.getElementById('recorder-timer').style.display = 'none';
+}
+
+// 提交音频回答
+async function submitAudioAnswer() {
+  if (!recordedBlob) {
+    showToast('请先录音');
+    return;
+  }
+  
+  const questionId = currentQuestion?.id;
+  if (!questionId) return;
+  
+  const formData = new FormData();
+  formData.append('questionId', questionId);
+  formData.append('student_audio', recordedBlob, 'recording.webm');
+  
+  try {
+    const token = getToken();
+    document.getElementById('submit-audio-btn').textContent = '提交中...';
+    document.getElementById('submit-audio-btn').disabled = true;
+    
+    const res = await fetch('/api/student/answers/audio', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    
+    const data = await res.json();
+    
+    if (data.success) {
+      hasAnswered = true;
+      showToast('提交成功');
+      showAnswerResult(data.data);
+    } else {
+      showToast(data.message || '提交失败');
+      document.getElementById('submit-audio-btn').textContent = '提交演唱';
+      document.getElementById('submit-audio-btn').disabled = false;
+    }
+  } catch (error) {
+    showToast('提交失败');
+    document.getElementById('submit-audio-btn').textContent = '提交演唱';
+    document.getElementById('submit-audio-btn').disabled = false;
+  }
 }
 
 // ============ Socket事件处理 ============

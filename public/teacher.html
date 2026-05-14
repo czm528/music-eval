@@ -91,6 +91,40 @@
         <div class="question-panel">
           <h3>发布问题</h3>
           <div class="question-form">
+            <!-- 题目类型选择 -->
+            <div class="form-group">
+              <label>题目类型</label>
+              <div class="type-selector">
+                <label class="type-option">
+                  <input type="radio" name="question-type" value="text" checked onchange="switchQuestionType('text')">
+                  <span class="type-label">📝 文字题</span>
+                </label>
+                <label class="type-option">
+                  <input type="radio" name="question-type" value="audio" onchange="switchQuestionType('audio')">
+                  <span class="type-label">🎤 音准题</span>
+                </label>
+              </div>
+            </div>
+            
+            <!-- 音频上传区域（默认隐藏） -->
+            <div class="form-group" id="audio-upload-group" style="display: none;">
+              <label>参考旋律音频</label>
+              <div class="audio-upload-area" id="audio-upload-area" onclick="document.getElementById('reference-audio-input').click()">
+                <input type="file" id="reference-audio-input" accept="audio/*" style="display: none;" onchange="handleAudioUpload(this)">
+                <div class="upload-hint" id="upload-hint">
+                  <span class="upload-icon">🎵</span>
+                  <p>点击上传参考旋律</p>
+                  <p class="upload-sub">支持 MP3、WAV 格式</p>
+                </div>
+                <div class="upload-preview" id="upload-preview" style="display: none;">
+                  <span>📎</span>
+                  <span id="audio-filename"></span>
+                  <audio id="audio-preview-player" controls style="width: 100%; margin-top: 8px;"></audio>
+                  <button class="btn btn-sm" onclick="event.stopPropagation(); removeAudio()">移除</button>
+                </div>
+              </div>
+            </div>
+            
             <textarea id="question-content" placeholder="请输入音乐鉴赏问题，例如：&#10;请描述这段音乐的速度、力度和情感特点"></textarea>
             <div class="dimension-selector">
               <label class="dimension-label">选择评分维度：</label>
