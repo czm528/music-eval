@@ -9,6 +9,8 @@ let radarChart = null;
 let distributionChart = null;
 let studentScoresChart = null;
 let qrCodeData = null;
+let echartsInstances = []; // 管理ECharts实例，切换时销毁
+let isLoadingClassroom = false; // 防止重复点击
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -93,7 +95,20 @@ function renderClassroomList() {
 
 // 选择课堂
 async function selectClassroom(id) {
+  // 防止重复点击
+  if (isLoadingClassroom) return;
+  if (currentClassroom && currentClassroom.id === id) return;
+  isLoadingClassroom = true;
+  
   try {
+    // 先销毁旧的图表实例
+    if (studentScoresChart) { studentScoresChart.destroy(); studentScoresChart = null; }
+    if (radarChart) { radarChart.destroy(); radarChart = null; }
+    if (distributionChart) { distributionChart.destroy(); distributionChart = null; }
+    // 销毁ECharts实例
+    echartsInstances.forEach(c => { try { c.dispose(); } catch(e) {} });
+    echartsInstances = [];
+    
     const res = await apiRequest(`/api/teacher/classrooms/${id}`);
     
     if (!res.success) {
@@ -138,7 +153,9 @@ async function selectClassroom(id) {
     
   } catch (error) {
     console.error('选择课堂错误:', error);
-    showToast('网络错误');
+    showToast('加载课堂失败');
+  } finally {
+    isLoadingClassroom = false;
   }
 }
 
@@ -630,6 +647,7 @@ function renderSingleWordcloud(container, words, type) {
   container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 350px;"></div>`;
   
   const chart = echarts.init(document.getElementById(chartId));
+  echartsInstances.push(chart); // 跟踪实例，切换课堂时销毁
   
   // 格式化数据
   const wordCloudData = words.map((item, idx) => ({
@@ -687,6 +705,7 @@ function renderEChartsWordcloud(container, words) {
   container.innerHTML = `<div id="${chartId}" style="width: 100%; height: 400px;"></div>`;
   
   const chart = echarts.init(document.getElementById(chartId));
+  echartsInstances.push(chart); // 跟踪实例，切换课堂时销毁
   
   // 词云颜色配置
   const colors = [
