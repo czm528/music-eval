@@ -120,7 +120,7 @@ router.get('/classrooms/:id', (req, res) => {
     // 获取已加入的学生（从实际回答过问题的学生中获取，不依赖classroom_students）
     const students = db.prepare(`
       SELECT DISTINCT s.id, s.name, s.student_number, s.class_id, 
-             MIN(a.created_at) as join_time
+             MIN(a.evaluated_at) as join_time
       FROM students s
       JOIN answers a ON a.student_id = s.id
       JOIN questions q ON a.question_id = q.id
