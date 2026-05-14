@@ -134,20 +134,20 @@ const musicKeywords = {
  * 关键词评分配置
  */
 const scoringConfig = {
-  // 每个关键词的基础分值
-  baseScore: 0.5,
+  // 每个关键词的基础分值（提高基础分让优秀回答能到6-8分）
+  baseScore: 0.8,
   // 每个关键词的最大分值
   maxKeywordScore: 4,
   // 表达长度加分（字数超过50字开始计）
   lengthBonus: {
     threshold: 50,
-    bonusPerChars: 0.02, // 每超过10字加0.02分
-    maxBonus: 1.0
+    bonusPerChars: 0.04, // 每超过10字加0.04分
+    maxBonus: 2.0
   },
   // 结构完整加分
   structureBonus: {
-    hasStructure: 1.0, // 有清晰结构
-    maxBonus: 1.0
+    hasStructure: 1.5, // 有清晰结构
+    maxBonus: 1.5
   },
   // 每个维度的最高分
   maxDimensionScore: 10,

@@ -630,7 +630,7 @@ router.get('/questions/:id/wordcloud', (req, res) => {
       try {
         if (answer.evaluation) {
           const evaluation = typeof answer.evaluation === 'string' 
-            ? JSON.parse(evaluation.evaluation || answer.evaluation) 
+            ? JSON.parse(answer.evaluation) 
             : answer.evaluation;
           
           // 修正：evaluation可能直接就是对象
