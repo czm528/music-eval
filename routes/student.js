@@ -5,9 +5,11 @@
 
 const express = require('express');
 const router = express.Router();
+const path = require('path');
 const { getDatabase } = require('../db/init');
 const { evaluateWithAI } = require('../services/ai-eval');
 const keywordEval = require('../services/keyword-eval');
+const { analyzePitch } = require('../services/pitchAnalyzer');
 
 // 中间件：检查学生权限（支持session和token两种认证方式）
 function requireStudent(req, res, next) {
@@ -335,27 +337,15 @@ router.post('/answers/audio', (req, res) => {
       let pitchDeviation = null;
       let content = '🎤 音频回答';
       
-      // 如果是音频题且有参考音频，调用Python音准分析服务
+      // 如果是音频题且有参考音频，调用Node.js音准分析
       if (question.question_type === 'audio' && question.reference_audio) {
         try {
-          const FormData = require('form-data');
-          const fs = require('fs');
-          const path = require('path');
+          const refPath = path.join(__dirname, '..', question.reference_audio.replace(/^\//, ''));
+          const result = await analyzePitch(req.file.path, refPath);
           
-          const formData = new FormData();
-          formData.append('student_audio', fs.createReadStream(path.join(__dirname, '..', req.file.path)));
-          formData.append('reference_audio', fs.createReadStream(path.join(__dirname, '..', question.reference_audio.replace(/^\//, ''))));
-          
-          const axios = require('axios');
-          const analysisRes = await axios.post(
-            process.env.AUDIO_SERVICE_URL || 'http://localhost:8000/analyze',
-            formData,
-            { headers: formData.getHeaders(), timeout: 30000 }
-          );
-          
-          if (analysisRes.data && analysisRes.data.success) {
-            pitchScore = analysisRes.data.data.score;
-            pitchDeviation = analysisRes.data.data.avg_deviation_cents;
+          if (result) {
+            pitchScore = result.score;
+            pitchDeviation = result.avg_deviation_cents;
             content = `🎤 音准得分: ${pitchScore}分 (偏差${pitchDeviation}音分)`;
           }
         } catch (e) {
@@ -541,4 +531,163 @@ router.get('/competency', (req, res) => {
     
     res.json({
       success: true,
-      d
+      data: {
+        dimensionAvgs,
+        recentAnswers,
+        totalAnswers: answers.length
+      }
+    });
+  } catch (error) {
+    console.error('获取素养画像错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 获取历史回答
+router.get('/history', (req, res) => {
+  const user = req.sessionUser || req.session.user;
+  const { page = 1, limit = 20 } = req.query;
+  const offset = (page - 1) * limit;
+  
+  const db = getDatabase();
+  
+  try {
+    const answers = db.prepare(`
+      SELECT a.*, q.content as question_content, c.name as classroom_name
+      FROM answers a
+      JOIN questions q ON a.question_id = q.id
+      JOIN classrooms c ON q.classroom_id = c.id
+      WHERE a.student_id = ?
+      ORDER BY a.evaluated_at DESC
+      LIMIT ? OFFSET ?
+    `).all(user.id, limit, offset);
+    
+    const total = db.prepare('SELECT COUNT(*) as count FROM answers WHERE student_id = ?').get(user.id).count;
+    
+    // 解析维度数据
+    answers.forEach(a => {
+      if (a.dimensions) {
+        try {
+          a.dimensions = JSON.parse(a.dimensions);
+        } catch (e) {}
+      }
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        answers,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          totalPages: Math.ceil(total / limit)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('获取历史记录错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 获取问题的回答详情
+router.get('/answers/:questionId', (req, res) => {
+  const user = req.sessionUser || req.session.user;
+  const { questionId } = req.params;
+  const db = getDatabase();
+  
+  try {
+    const answer = db.prepare(`
+      SELECT a.*, q.content as question_content
+      FROM answers a
+      JOIN questions q ON a.question_id = q.id
+      WHERE a.question_id = ? AND a.student_id = ?
+    `).get(questionId, user.id);
+    
+    if (!answer) {
+      return res.json({ success: false, message: '回答不存在' });
+    }
+    
+    // 解析维度数据
+    if (answer.dimensions) {
+      try {
+        answer.dimensions = JSON.parse(answer.dimensions);
+      } catch (e) {}
+    }
+    
+    // 解析评价数据
+    if (answer.evaluation) {
+      try {
+        answer.evaluation = JSON.parse(answer.evaluation);
+      } catch (e) {}
+    }
+    
+    res.json({
+      success: true,
+      data: answer
+    });
+  } catch (error) {
+    console.error('获取回答详情错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// ============ 辅助函数 ============
+
+// 更新学生素养记录
+function updateCompetencyRecord(db, studentId, dimensions, selectedDimensions = null) {
+  const targetDimensions = selectedDimensions || Object.keys(dimensions);
+  
+  for (const [dimension, score] of Object.entries(dimensions)) {
+    // 只更新选中的维度
+    if (!targetDimensions.includes(dimension)) {
+      continue;
+    }
+    
+    const existing = db.prepare('SELECT * FROM competency_records WHERE student_id = ? AND dimension = ?').get(
+      studentId, dimension
+    );
+    
+    if (existing) {
+      // 更新记录（计算新的平均值）
+      const newCount = existing.answer_count + 1;
+      const newTotal = existing.total_score * existing.answer_count + score;
+      const newAvg = newTotal / newCount;
+      
+      db.prepare(`
+        UPDATE competency_records 
+        SET total_score = ?, answer_count = ?, avg_score = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE student_id = ? AND dimension = ?
+      `).run(newTotal, newCount, newAvg, studentId, dimension);
+    } else {
+      // 创建新记录
+      db.prepare(`
+        INSERT INTO competency_records (student_id, dimension, total_score, answer_count, avg_score)
+        VALUES (?, ?, ?, 1, ?)
+      `).run(studentId, dimension, score, score);
+    }
+  }
+}
+
+// 获取课堂统计
+function getClassroomStats(db, classroomId) {
+  const studentCount = db.prepare('SELECT COUNT(*) as count FROM classroom_students WHERE classroom_id = ?').get(classroomId).count;
+  
+  const questions = db.prepare(`
+    SELECT id, (SELECT COUNT(*) FROM answers WHERE question_id = q.id) as answer_count
+    FROM questions q
+    WHERE q.classroom_id = ? AND ended_at IS NULL
+  `).all(classroomId);
+  
+  const currentQuestion = questions[0] || null;
+  const totalAnswers = questions.reduce((sum, q) => sum + q.answer_count, 0);
+  
+  return {
+    studentCount,
+    currentQuestionAnswerCount: currentQuestion ? currentQuestion.answer_count : 0,
+    totalAnswers
+  };
+}
+
+module.exports = router;
