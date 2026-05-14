@@ -74,14 +74,11 @@ async def analyze_audio(
     - **max_deviation_cents**: 最大音分偏差
     - **pitch_match_rate**: 音高匹配率（%）
     """
-    # 验证文件格式
-    allowed_extensions = {'.wav', '.mp3', '.flac', '.ogg', '.m4a'}
+    # 验证文件格式（宽松验证，只检查是否为音频）
+    # 不再严格校验扩展名，因为浏览器录音可能上传webm等格式
     for audio_file in [student_audio, reference_audio]:
-        if not any(audio_file.filename.lower().endswith(ext) for ext in allowed_extensions):
-            raise HTTPException(
-                status_code=400,
-                detail=f"不支持的音频格式: {audio_file.filename}，支持: {', '.join(allowed_extensions)}"
-            )
+        if not audio_file.filename:
+            raise HTTPException(status_code=400, detail="缺少音频文件")
     
     # 保存上传的文件到临时目录
     stu_path = None

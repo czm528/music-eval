@@ -1,11 +1,12 @@
 """
 音准分析核心模块
-使用 librosa.pyin 提取音高曲线，DTW 对齐后计算偏差
+使用 librosa.pyin 提取音高曲线，fastdtw 对齐后计算偏差
 """
 
 import librosa
 import numpy as np
-from dtw import dtw
+from fastdtw import fastdtw
+from scipy.spatial.distance import euclidean
 
 
 def analyze_pitch(student_path: str, reference_path: str):
@@ -25,14 +26,13 @@ def analyze_pitch(student_path: str, reference_path: str):
     y_stu, sr_stu = librosa.load(student_path, sr=22050)
     
     # 2. 提取音高（pyin算法，适合人声）
-    # fmin=C2(约65Hz), fmax=C7(约2093Hz)，覆盖人声范围
-    f0_ref, voiced_flag_ref, _ = librosa.pyin(
+    f0_ref, _, _ = librosa.pyin(
         y_ref,
         fmin=librosa.note_to_hz('C2'),
         fmax=librosa.note_to_hz('C7'),
         sr=22050
     )
-    f0_stu, voiced_flag_stu, _ = librosa.pyin(
+    f0_stu, _, _ = librosa.pyin(
         y_stu,
         fmin=librosa.note_to_hz('C2'),
         fmax=librosa.note_to_hz('C7'),
@@ -51,23 +51,15 @@ def analyze_pitch(student_path: str, reference_path: str):
     ref_cents = 1200 * np.log2(ref_voiced / ref_median)
     stu_cents = 1200 * np.log2(stu_voiced / ref_median)
     
-    # 5. DTW对齐
-    # 将两条曲线重采样到相同长度便于比较
-    target_len = max(len(ref_cents), len(stu_cents))
-    ref_resampled = librosa.util.fix_length(ref_cents, size=target_len)
-    stu_resampled = librosa.util.fix_length(stu_cents, size=target_len)
+    # 5. fastdtw对齐
+    ref_series = ref_cents.reshape(-1, 1)
+    stu_series = stu_cents.reshape(-1, 1)
     
-    # 用DTW找最优对齐
-    alignment = dtw(
-        stu_resampled.reshape(-1, 1),
-        ref_resampled.reshape(-1, 1),
-        dist_method='euclidean',
-        step_pattern='symmetric2'
-    )
+    distance, path = fastdtw(stu_series, ref_series, dist=euclidean)
     
     # 6. 计算对齐后的偏差
-    aligned_stu = stu_resampled[alignment.index1]
-    aligned_ref = ref_resampled[alignment.index2]
+    aligned_stu = stu_series[[p[0] for p in path]].flatten()
+    aligned_ref = ref_series[[p[1] for p in path]].flatten()
     deviations = np.abs(aligned_stu - aligned_ref)
     
     avg_deviation = float(np.mean(deviations))
@@ -84,8 +76,8 @@ def analyze_pitch(student_path: str, reference_path: str):
         'avg_deviation_cents': round(avg_deviation, 1),
         'max_deviation_cents': round(max_deviation, 1),
         'pitch_match_rate': round(pitch_match_rate * 100, 1),
-        'ref_notes_count': len(ref_voiced),
-        'stu_notes_count': len(stu_voiced)
+        'ref_notes_count': int(len(ref_voiced)),
+        'stu_notes_count': int(len(stu_voiced))
     }
 
 
@@ -101,19 +93,14 @@ def deviation_to_score(avg_deviation: float) -> float:
     - >120音分 → 0-40分（需加强）
     """
     if avg_deviation <= 30:
-        # 90-100，线性插值
         return round(90 + (30 - avg_deviation) / 30 * 10, 1)
     elif avg_deviation <= 50:
-        # 75-90，线性插值
         return round(75 + (50 - avg_deviation) / 20 * 15, 1)
     elif avg_deviation <= 80:
-        # 60-75，线性插值
         return round(60 + (80 - avg_deviation) / 30 * 15, 1)
     elif avg_deviation <= 120:
-        # 40-60，线性插值
         return round(40 + (120 - avg_deviation) / 40 * 20, 1)
     else:
-        # 0-40，线性插值
         return round(max(0, 40 - (avg_deviation - 120) / 80 * 40), 1)
 
 
