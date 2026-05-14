@@ -117,12 +117,15 @@ router.get('/classrooms/:id', (req, res) => {
       return res.json({ success: false, message: '课堂不存在' });
     }
     
-    // 获取已加入的学生
+    // 获取已加入的学生（从实际回答过问题的学生中获取，不依赖classroom_students）
     const students = db.prepare(`
-      SELECT s.*, cs.join_time
+      SELECT DISTINCT s.id, s.name, s.student_number, s.class_id, 
+             MIN(a.created_at) as join_time
       FROM students s
-      JOIN classroom_students cs ON s.id = cs.student_id
-      WHERE cs.classroom_id = ?
+      JOIN answers a ON a.student_id = s.id
+      JOIN questions q ON a.question_id = q.id
+      WHERE q.classroom_id = ?
+      GROUP BY s.id
     `).all(id);
     
     // 获取问题列表
@@ -135,6 +138,15 @@ router.get('/classrooms/:id', (req, res) => {
       ORDER BY q.created_at DESC
     `).all(id);
     
+    // 对问题avg_score做归一化（100分制）
+    questions.forEach(q => {
+      const dims = q.dimensions ? JSON.parse(q.dimensions) : ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+      const maxScore = dims.length * 10;
+      q.normalized_avg_score = (q.avg_score !== null && maxScore > 0) 
+        ? Math.round((q.avg_score / maxScore) * 100 * 10) / 10 
+        : 0;
+    });
+    
     // 获取二维码（重新生成）
     const joinUrl = `${config.frontend.baseUrl}/answer/${classroom.session_id}`;
     QRCode.toDataURL(joinUrl, { width: 300, margin: 2 }, (err, qrCode) => {
@@ -142,6 +154,7 @@ router.get('/classrooms/:id', (req, res) => {
         success: true,
         data: {
           ...classroom,
+          student_count: students.length,
           qrCode: qrCode || null,
           joinUrl,
           students,
