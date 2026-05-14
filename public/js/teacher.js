@@ -11,6 +11,10 @@ let studentScoresChart = null;
 let qrCodeData = null;
 let echartsInstances = []; // 管理ECharts实例，切换时销毁
 let isLoadingClassroom = false; // 防止重复点击
+// 分页相关全局变量
+let allStudentTotalScores = [];
+let totalScoresCurrentPage = 1;
+const totalScoresPageSize = 10;
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -767,50 +771,37 @@ function renderEChartsWordcloud(container, words) {
   });
 }
 
-// 渲染学生课堂总评列表
+// 渲染学生课堂总评列表（带分页）
 function renderStudentTotalScores(studentTotalScores) {
-  // 查找或创建总评区域
-  let container = document.getElementById('student-total-scores');
-  if (!container) {
-    // 在评价图表之前插入总评区域
-    const chartsSection = document.querySelector('.charts-section');
-    if (!chartsSection) return;
-    
-    container = document.createElement('div');
-    container.id = 'student-total-scores';
-    container.className = 'student-total-scores';
-    container.innerHTML = `
-      <h3>学生课堂总评（100分制）</h3>
-      <div class="total-scores-table">
-        <table>
-          <thead>
-            <tr>
-              <th>学号</th>
-              <th>姓名</th>
-              <th>总评得分</th>
-              <th>已答题目</th>
-            </tr>
-          </thead>
-          <tbody id="total-scores-tbody">
-          </tbody>
-        </table>
-      </div>
-    `;
-    chartsSection.parentNode.insertBefore(container, chartsSection);
-  }
-  
-  const tbody = document.getElementById('total-scores-tbody');
-  if (!tbody) return;
+  const container = document.getElementById('student-total-scores');
+  if (!container) return;
   
   if (!studentTotalScores || studentTotalScores.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-state">暂无学生数据</td></tr>';
+    container.style.display = 'none';
     return;
   }
   
-  // 按总评得分降序排列
-  const sorted = [...studentTotalScores].sort((a, b) => b.totalScore - a.totalScore);
+  container.style.display = '';
+  // 存储完整数据并按总分降序排列
+  allStudentTotalScores = [...studentTotalScores].sort((a, b) => b.totalScore - a.totalScore);
+  totalScoresCurrentPage = 1;
+  renderTotalScoresPage(1);
+}
+
+// 渲染指定页的数据
+function renderTotalScoresPage(page) {
+  const tbody = document.getElementById('total-scores-tbody');
+  if (!tbody) return;
   
-  tbody.innerHTML = sorted.map(s => {
+  const totalPages = Math.ceil(allStudentTotalScores.length / totalScoresPageSize);
+  page = Math.max(1, Math.min(page, totalPages));
+  totalScoresCurrentPage = page;
+  
+  const start = (page - 1) * totalScoresPageSize;
+  const end = start + totalScoresPageSize;
+  const pageData = allStudentTotalScores.slice(start, end);
+  
+  tbody.innerHTML = pageData.map(s => {
     const scoreColor = getScoreColor(s.totalScore / 10);
     const scoreLevel = getScoreLevel(s.totalScore / 10);
     return `
@@ -822,6 +813,21 @@ function renderStudentTotalScores(studentTotalScores) {
       </tr>
     `;
   }).join('');
+  
+  // 更新分页信息
+  const pageInfo = document.getElementById('total-scores-page-info');
+  if (pageInfo) pageInfo.textContent = `第 ${page}/${totalPages} 页`;
+  
+  // 更新按钮状态
+  const prevBtn = document.querySelector('#total-scores-pagination .page-btn:first-child');
+  const nextBtn = document.querySelector('#total-scores-pagination .page-btn:last-child');
+  if (prevBtn) prevBtn.disabled = page <= 1;
+  if (nextBtn) nextBtn.disabled = page >= totalPages;
+}
+
+// 翻页处理
+function changeTotalScoresPage(delta) {
+  renderTotalScoresPage(totalScoresCurrentPage + delta);
 }
 
 // 渲染雷达图
