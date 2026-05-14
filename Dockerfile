@@ -1,14 +1,39 @@
-FROM node:18-alpine
+FROM node:18-slim
 
-# 安装 better-sqlite3 编译所需的工具
-RUN apk add --no-cache python3 make g++
+# 安装系统依赖：better-sqlite3编译 + Python音频分析
+RUN apt-get update && apt-get install -y \
+    python3 python3-pip python3-venv \
+    build-essential make g++ \
+    libsndfile1 ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# 创建Python虚拟环境并安装依赖
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
+
+# 先安装Python依赖（利用Docker缓存）
+COPY audio-service/requirements.txt /tmp/audio-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/audio-requirements.txt && rm /tmp/audio-requirements.txt
+
+# 安装Node依赖
 COPY package*.json ./
 RUN npm install --production
+
+# 复制所有代码
 COPY . .
-RUN mkdir -p db data
-EXPOSE 3000
+
+# 创建必要目录
+RUN mkdir -p db data uploads/audio
+
+# 启动脚本：同时运行Node和Python服务
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+EXPOSE 3000 8000
 ENV HOST=0.0.0.0
 ENV PORT=3000
-CMD ["node", "server.js"]
+ENV AUDIO_SERVICE_URL=http://127.0.0.1:8000/analyze
+
+CMD ["/app/start.sh"]
