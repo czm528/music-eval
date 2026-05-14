@@ -16,23 +16,12 @@ async function analyzePitch(studentPath, referencePath) {
   const WavDecoder = require('wav-decoder');
   
   try {
-    // 1. 读取并解码音频文件
-    let studentDecoded, referenceDecoded;
+    // 1. 读取并解码WAV音频文件（浏览器端已转码为WAV格式）
+    const studentBuffer = fs.readFileSync(studentPath);
+    const referenceBuffer = fs.readFileSync(referencePath);
     
-    try {
-      const studentBuffer = fs.readFileSync(studentPath);
-      studentDecoded = await WavDecoder.decode(studentBuffer);
-    } catch (e) {
-      // 如果wav-decoder无法解码（如webm格式），尝试用ffmpeg转换
-      studentDecoded = await decodeWithFFmpeg(studentPath);
-    }
-    
-    try {
-      const referenceBuffer = fs.readFileSync(referencePath);
-      referenceDecoded = await WavDecoder.decode(referenceBuffer);
-    } catch (e) {
-      referenceDecoded = await decodeWithFFmpeg(referencePath);
-    }
+    const studentDecoded = await WavDecoder.decode(studentBuffer);
+    const referenceDecoded = await WavDecoder.decode(referenceBuffer);
     
     if (!studentDecoded || !referenceDecoded) {
       return null;
@@ -106,29 +95,6 @@ function extractPitches(audioData, detectPitch, frameSize, hopSize) {
     pitches.push(pitch);
   }
   return pitches;
-}
-
-/**
- * 用ffmpeg解码非wav格式的音频
- */
-async function decodeWithFFmpeg(filePath) {
-  const { execSync } = require('child_process');
-  const tmpPath = filePath + '.tmp.wav';
-  
-  try {
-    execSync(`ffmpeg -i "${filePath}" -ar 44100 -ac 1 -f wav "${tmpPath}" -y 2>/dev/null`, {
-      timeout: 10000
-    });
-    
-    const WavDecoder = require('wav-decoder');
-    const buffer = fs.readFileSync(tmpPath);
-    const decoded = await WavDecoder.decode(buffer);
-    fs.unlinkSync(tmpPath);
-    return decoded;
-  } catch (e) {
-    try { fs.unlinkSync(tmpPath); } catch(ex) {}
-    return null;
-  }
 }
 
 /**

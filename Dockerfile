@@ -1,7 +1,7 @@
 FROM node:18-alpine
 
-# 安装 better-sqlite3 编译工具 + ffmpeg（音频转码）
-RUN apk add --no-cache python3 make g++ ffmpeg
+# 安装 better-sqlite3 编译工具
+RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 COPY package*.json ./

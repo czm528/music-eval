@@ -493,14 +493,19 @@ async function submitAudioAnswer() {
   const questionId = currentQuestion?.id;
   if (!questionId) return;
   
-  const formData = new FormData();
-  formData.append('questionId', questionId);
-  formData.append('student_audio', recordedBlob, 'recording.webm');
-  
   try {
     const token = getToken();
-    document.getElementById('submit-audio-btn').textContent = '提交中...';
+    document.getElementById('submit-audio-btn').textContent = '转码中...';
     document.getElementById('submit-audio-btn').disabled = true;
+    
+    // 浏览器端将webm转码为wav（服务端不需要ffmpeg）
+    const wavBlob = await convertToWav(recordedBlob);
+    
+    const formData = new FormData();
+    formData.append('questionId', questionId);
+    formData.append('student_audio', wavBlob, 'recording.wav');
+    
+    document.getElementById('submit-audio-btn').textContent = '提交中...';
     
     const res = await fetch('/api/student/answers/audio', {
       method: 'POST',
@@ -523,6 +528,65 @@ async function submitAudioAnswer() {
     showToast('提交失败');
     document.getElementById('submit-audio-btn').textContent = '提交演唱';
     document.getElementById('submit-audio-btn').disabled = false;
+  }
+}
+
+// 浏览器端将webm音频转码为wav格式
+async function convertToWav(blob) {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  
+  // 转为单声道
+  const numChannels = 1;
+  const sampleRate = 44100;
+  const format = 1; // PCM
+  
+  const offlineCtx = new OfflineAudioContext(numChannels, audioBuffer.duration * sampleRate, sampleRate);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start();
+  const renderedBuffer = await offlineCtx.startRendering();
+  
+  const channelData = renderedBuffer.getChannelData(0);
+  const dataLength = channelData.length * 2; // 16bit = 2 bytes per sample
+  const headerLength = 44;
+  const totalLength = headerLength + dataLength;
+  
+  const wavBuffer = new ArrayBuffer(totalLength);
+  const view = new DataView(wavBuffer);
+  
+  // WAV文件头
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, totalLength - 8, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // fmt chunk size
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * 2, true); // byte rate
+  view.setUint16(32, numChannels * 2, true); // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataLength, true);
+  
+  // 写入音频数据
+  let offset = 44;
+  for (let i = 0; i < channelData.length; i++) {
+    const sample = Math.max(-1, Math.min(1, channelData[i]));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+    offset += 2;
+  }
+  
+  audioContext.close();
+  return new Blob([wavBuffer], { type: 'audio/wav' });
+}
+
+function writeString(view, offset, string) {
+  for (let i = 0; i < string.length; i++) {
+    view.setUint8(offset + i, string.charCodeAt(i));
   }
 }
 
