@@ -1,7 +1,8 @@
 FROM node:18-alpine
 
-# 安装 better-sqlite3 编译工具 + ffmpeg（音频转码）
-RUN apk add --no-cache python3 make g++ ffmpeg
+# 添加community仓库 + 安装编译工具和ffmpeg
+RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
+    apk add --no-cache python3 make g++ ffmpeg
 
 WORKDIR /app
 COPY package*.json ./
