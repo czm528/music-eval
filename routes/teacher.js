@@ -879,3 +879,25 @@ router.get('/my-classes', (req, res) => {
 });
 
 // 获取班级的学生列表
+router.get('/classes/:id/students', (req, res) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  
+  try {
+    const students = db.prepare(`
+      SELECT s.*,
+             (SELECT COUNT(*) FROM answers WHERE student_id = s.id) as answer_count,
+             (SELECT AVG(total_score) FROM answers WHERE student_id = s.id) as avg_score
+      FROM students s
+      WHERE s.class_id = ?
+      ORDER BY s.name
+    `).all(id);
+    
+    res.json({ success: true, data: students });
+  } catch (error) {
+    console.error('获取学生列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+module.exports = router;
