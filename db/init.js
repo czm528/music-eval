@@ -205,6 +205,39 @@ function migrateDatabase() {
   const tableInfo = db.prepare("PRAGMA table_info(questions)").all();
   const columnNames = tableInfo.map(col => col.name);
   
+  // ============ 模块化改造迁移 ============
+  
+  // 检查modules表是否存在，不存在则创建
+  const modulesTableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='modules'").get();
+  if (!modulesTableExists) {
+    console.log('正在创建 modules 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS modules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        teacher_id INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        sort_order INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (teacher_id) REFERENCES teachers(id)
+      )
+    `);
+    console.log('modules 表创建完成');
+  }
+  
+  // 检查classrooms表是否有module_id列
+  const classroomsColumns = db.prepare("PRAGMA table_info(classrooms)").all().map(c => c.name);
+  if (!classroomsColumns.includes('module_id')) {
+    try {
+      db.exec("ALTER TABLE classrooms ADD COLUMN module_id INTEGER REFERENCES modules(id)");
+      console.log('数据库迁移：classrooms 表添加了 module_id 字段');
+    } catch (e) {
+      console.log('module_id列已存在或添加失败:', e.message);
+    }
+  }
+  
+  // ============ 原有迁移逻辑 ============
+  
   // 如果有旧的dimension字段，需要迁移到dimensions
   if (columnNames.includes('dimension') && !columnNames.includes('dimensions')) {
     console.log('正在迁移questions表：dimension -> dimensions...');
@@ -247,20 +280,20 @@ function migrateDatabase() {
   }
   
   // 迁移：添加音频相关字段
-  const questionsColumns = db.prepare("PRAGMA table_info(questions)").all().map(c => c.name);
   const answersColumns = db.prepare("PRAGMA table_info(answers)").all().map(c => c.name);
   
   const migrations = [
-    { table: 'questions', column: 'question_type', checkCols: questionsColumns, type: 'TEXT DEFAULT "text"' },
-    { table: 'questions', column: 'reference_audio', checkCols: questionsColumns, type: 'TEXT DEFAULT NULL' },
-    { table: 'answers', column: 'audio_file', checkCols: answersColumns, type: 'TEXT DEFAULT NULL' },
-    { table: 'answers', column: 'pitch_score', checkCols: answersColumns, type: 'REAL DEFAULT NULL' },
-    { table: 'answers', column: 'pitch_deviation', checkCols: answersColumns, type: 'REAL DEFAULT NULL' },
-    { table: 'answers', column: 'pitch_curve', checkCols: answersColumns, type: 'TEXT DEFAULT NULL' },
+    { table: 'questions', column: 'question_type', type: 'TEXT DEFAULT "text"' },
+    { table: 'questions', column: 'reference_audio', type: 'TEXT DEFAULT NULL' },
+    { table: 'answers', column: 'audio_file', type: 'TEXT DEFAULT NULL' },
+    { table: 'answers', column: 'pitch_score', type: 'REAL DEFAULT NULL' },
+    { table: 'answers', column: 'pitch_deviation', type: 'REAL DEFAULT NULL' },
+    { table: 'answers', column: 'pitch_curve', type: 'TEXT DEFAULT NULL' },
   ];
   
   for (const m of migrations) {
-    if (!m.checkCols.includes(m.column)) {
+    const currentColumns = db.prepare(`PRAGMA table_info(${m.table})`).all().map(c => c.name);
+    if (!currentColumns.includes(m.column)) {
       try {
         db.exec(`ALTER TABLE ${m.table} ADD COLUMN ${m.column} ${m.type}`);
         console.log(`数据库迁移：${m.table} 表添加了 ${m.column} 字段`);

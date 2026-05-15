@@ -41,34 +41,232 @@ function requireTeacher(req, res, next) {
 
 router.use(requireTeacher);
 
+// ============ 模块管理 ============
+
+// 获取当前教师的所有模块（含每个模块下的任务列表）
+router.get('/modules', (req, res) => {
+  const user = req.sessionUser || req.session.user;
+  const db = getDatabase();
+  
+  try {
+    // 获取所有模块
+    const modules = db.prepare(`
+      SELECT * FROM modules
+      WHERE teacher_id = ?
+      ORDER BY sort_order ASC, created_at ASC
+    `).all(user.id);
+    
+    // 获取每个模块下的任务（课堂）
+    const modulesWithTasks = modules.map(module => {
+      const tasks = db.prepare(`
+        SELECT c.*, 
+               (SELECT COUNT(DISTINCT a.student_id) FROM answers a JOIN questions q ON a.question_id = q.id WHERE q.classroom_id = c.id) as student_count,
+               (SELECT COUNT(*) FROM questions WHERE classroom_id = c.id) as question_count
+        FROM classrooms c
+        WHERE c.module_id = ?
+        ORDER BY c.created_at DESC
+      `).all(module.id);
+      
+      return {
+        ...module,
+        tasks: tasks
+      };
+    });
+    
+    res.json({ success: true, data: modulesWithTasks });
+  } catch (error) {
+    console.error('获取模块列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 创建模块
+router.post('/modules', (req, res) => {
+  const user = req.sessionUser || req.session.user;
+  const { name, description } = req.body;
+  
+  if (!name) {
+    return res.json({ success: false, message: '请填写模块名称' });
+  }
+  
+  const db = getDatabase();
+  
+  try {
+    // 获取当前最大排序值
+    const maxOrder = db.prepare('SELECT MAX(sort_order) as maxOrder FROM modules WHERE teacher_id = ?').get(user.id);
+    const sortOrder = (maxOrder?.maxOrder ?? -1) + 1;
+    
+    const result = db.prepare(`
+      INSERT INTO modules (teacher_id, name, description, sort_order)
+      VALUES (?, ?, ?, ?)
+    `).run(user.id, name, description || null, sortOrder);
+    
+    res.json({ 
+      success: true, 
+      message: '模块创建成功', 
+      data: { 
+        id: result.lastInsertRowid, 
+        name, 
+        description, 
+        sort_order: sortOrder,
+        tasks: []
+      } 
+    });
+  } catch (error) {
+    console.error('创建模块错误:', error);
+    res.json({ success: false, message: '创建失败' });
+  }
+});
+
+// 更新模块
+router.put('/modules/:id', (req, res) => {
+  const { id } = req.params;
+  const user = req.sessionUser || req.session.user;
+  const { name, description } = req.body;
+  
+  if (!name) {
+    return res.json({ success: false, message: '请填写模块名称' });
+  }
+  
+  const db = getDatabase();
+  
+  try {
+    // 验证模块归属
+    const module = db.prepare('SELECT * FROM modules WHERE id = ? AND teacher_id = ?').get(id, user.id);
+    if (!module) {
+      return res.json({ success: false, message: '模块不存在' });
+    }
+    
+    db.prepare(`
+      UPDATE modules SET name = ?, description = ? WHERE id = ? AND teacher_id = ?
+    `).run(name, description || null, id, user.id);
+    
+    res.json({ success: true, message: '模块更新成功' });
+  } catch (error) {
+    console.error('更新模块错误:', error);
+    res.json({ success: false, message: '更新失败' });
+  }
+});
+
+// 删除模块
+router.delete('/modules/:id', (req, res) => {
+  const { id } = req.params;
+  const user = req.sessionUser || req.session.user;
+  const db = getDatabase();
+  
+  try {
+    // 验证模块归属
+    const module = db.prepare('SELECT * FROM modules WHERE id = ? AND teacher_id = ?').get(id, user.id);
+    if (!module) {
+      return res.json({ success: false, message: '模块不存在' });
+    }
+    
+    // 检查模块下是否有任务
+    const taskCount = db.prepare('SELECT COUNT(*) as count FROM classrooms WHERE module_id = ?').get(id);
+    if (taskCount.count > 0) {
+      return res.json({ 
+        success: false, 
+        message: `该模块下有 ${taskCount.count} 个任务，请先删除或移动任务后再删除模块`,
+        taskCount: taskCount.count
+      });
+    }
+    
+    db.prepare('DELETE FROM modules WHERE id = ? AND teacher_id = ?').run(id, user.id);
+    
+    res.json({ success: true, message: '模块删除成功' });
+  } catch (error) {
+    console.error('删除模块错误:', error);
+    res.json({ success: false, message: '删除失败' });
+  }
+});
+
+// 调整模块排序
+router.patch('/modules/:id/order', (req, res) => {
+  const { id } = req.params;
+  const user = req.sessionUser || req.session.user;
+  const { sortOrder } = req.body;
+  
+  if (sortOrder === undefined || sortOrder === null) {
+    return res.json({ success: false, message: '请提供排序值' });
+  }
+  
+  const db = getDatabase();
+  
+  try {
+    // 验证模块归属
+    const module = db.prepare('SELECT * FROM modules WHERE id = ? AND teacher_id = ?').get(id, user.id);
+    if (!module) {
+      return res.json({ success: false, message: '模块不存在' });
+    }
+    
+    db.prepare('UPDATE modules SET sort_order = ? WHERE id = ?').run(sortOrder, id);
+    
+    res.json({ success: true, message: '排序更新成功' });
+  } catch (error) {
+    console.error('更新模块排序错误:', error);
+    res.json({ success: false, message: '更新失败' });
+  }
+});
+
 // ============ 课堂管理 ============
 
-// 获取教师的课堂列表
+// 获取教师的课堂列表（按模块分组）
 router.get('/classrooms', (req, res) => {
   const user = req.sessionUser || req.session.user;
   const db = getDatabase();
   
   try {
-    const classrooms = db.prepare(`
+    // 获取所有模块
+    const modules = db.prepare(`
+      SELECT * FROM modules
+      WHERE teacher_id = ?
+      ORDER BY sort_order ASC, created_at ASC
+    `).all(user.id);
+    
+    // 获取未归类的课堂（module_id为NULL）
+    const uncategorizedClassrooms = db.prepare(`
       SELECT c.*, 
              (SELECT COUNT(DISTINCT a.student_id) FROM answers a JOIN questions q ON a.question_id = q.id WHERE q.classroom_id = c.id) as student_count,
              (SELECT COUNT(*) FROM questions WHERE classroom_id = c.id) as question_count
       FROM classrooms c
-      WHERE c.teacher_id = ?
+      WHERE c.teacher_id = ? AND c.module_id IS NULL
       ORDER BY c.created_at DESC
     `).all(user.id);
     
-    res.json({ success: true, data: classrooms });
+    // 获取每个模块下的课堂
+    const result = modules.map(module => {
+      const tasks = db.prepare(`
+        SELECT c.*, 
+               (SELECT COUNT(DISTINCT a.student_id) FROM answers a JOIN questions q ON a.question_id = q.id WHERE q.classroom_id = c.id) as student_count,
+               (SELECT COUNT(*) FROM questions WHERE classroom_id = c.id) as question_count
+        FROM classrooms c
+        WHERE c.module_id = ?
+        ORDER BY c.created_at DESC
+      `).all(module.id);
+      
+      return {
+        ...module,
+        tasks: tasks
+      };
+    });
+    
+    res.json({ 
+      success: true, 
+      data: {
+        modules: result,
+        uncategorized: uncategorizedClassrooms
+      }
+    });
   } catch (error) {
     console.error('获取课堂列表错误:', error);
     res.json({ success: false, message: '获取失败' });
   }
 });
 
-// 创建课堂
+// 创建课堂（任务）
 router.post('/classrooms', (req, res) => {
   const user = req.sessionUser || req.session.user;
-  const { name, description, classId } = req.body;
+  const { name, description, classId, moduleId } = req.body;
   
   if (!name) {
     return res.json({ success: false, message: '请填写课堂名称' });
@@ -77,12 +275,20 @@ router.post('/classrooms', (req, res) => {
   const db = getDatabase();
   
   try {
+    // 如果提供了moduleId，验证模块归属
+    if (moduleId) {
+      const module = db.prepare('SELECT * FROM modules WHERE id = ? AND teacher_id = ?').get(moduleId, user.id);
+      if (!module) {
+        return res.json({ success: false, message: '模块不存在' });
+      }
+    }
+    
     const sessionId = uuidv4().replace(/-/g, '').substring(0, 12);
     
     const result = db.prepare(`
-      INSERT INTO classrooms (session_id, name, description, teacher_id, class_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(sessionId, name, description || null, user.id, classId || null);
+      INSERT INTO classrooms (session_id, name, description, teacher_id, class_id, module_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(sessionId, name, description || null, user.id, classId || null, moduleId || null);
     
     // 生成二维码
     const joinUrl = `${config.frontend.baseUrl}/answer/${sessionId}`;
@@ -96,6 +302,38 @@ router.post('/classrooms', (req, res) => {
   } catch (error) {
     console.error('创建课堂错误:', error);
     res.json({ success: false, message: '创建失败' });
+  }
+});
+
+// 移动课堂到指定模块
+router.patch('/classrooms/:id/module', (req, res) => {
+  const { id } = req.params;
+  const user = req.sessionUser || req.session.user;
+  const { moduleId } = req.body;
+  
+  const db = getDatabase();
+  
+  try {
+    // 验证课堂归属
+    const classroom = db.prepare('SELECT * FROM classrooms WHERE id = ? AND teacher_id = ?').get(id, user.id);
+    if (!classroom) {
+      return res.json({ success: false, message: '课堂不存在' });
+    }
+    
+    // 如果提供了moduleId，验证模块归属
+    if (moduleId) {
+      const module = db.prepare('SELECT * FROM modules WHERE id = ? AND teacher_id = ?').get(moduleId, user.id);
+      if (!module) {
+        return res.json({ success: false, message: '模块不存在' });
+      }
+    }
+    
+    db.prepare('UPDATE classrooms SET module_id = ? WHERE id = ?').run(moduleId || null, id);
+    
+    res.json({ success: true, message: '移动成功' });
+  } catch (error) {
+    console.error('移动课堂错误:', error);
+    res.json({ success: false, message: '移动失败' });
   }
 });
 

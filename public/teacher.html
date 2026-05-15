@@ -21,26 +21,33 @@
   </header>
   
   <div class="main-container">
-    <!-- 左侧：课堂列表 -->
+    <!-- 左侧：模块和任务列表 -->
     <aside class="classroom-list">
       <div class="list-header">
-        <h2>我的课堂</h2>
-        <button class="btn btn-primary btn-sm" onclick="showCreateClassroom()">
-          + 新建
+        <h2>我的课程</h2>
+        <button class="btn btn-primary btn-sm" onclick="showCreateModule()" title="新建模块">
+          📂 新建模块
         </button>
       </div>
       
       <div class="classroom-items" id="classroom-list">
         <div class="loading">加载中...</div>
       </div>
+      
+      <!-- 无模块的快速创建任务入口 -->
+      <div class="quick-create-task" id="quick-create-task" style="display: none;">
+        <button class="btn btn-sm btn-secondary" onclick="showCreateTaskNoModule()">
+          + 直接创建任务（无模块）
+        </button>
+      </div>
     </aside>
     
-    <!-- 右侧：课堂详情/看板 -->
+    <!-- 右侧：任务详情/看板 -->
     <main class="classroom-detail">
       <div id="no-classroom" class="empty-state-full">
         <div class="empty-icon">📋</div>
-        <h3>选择或创建一个课堂</h3>
-        <p>点击左侧「新建」按钮创建课堂</p>
+        <h3>选择或创建一个任务</h3>
+        <p>点击左侧「新建模块」或「创建任务」按钮开始</p>
       </div>
       
       <div id="classroom-view" class="hidden">
@@ -51,7 +58,7 @@
           </div>
           <div class="detail-actions">
             <button class="btn btn-secondary" onclick="showQRCode()">📱 二维码</button>
-            <button class="btn btn-danger" onclick="endClassroom()">结束课堂</button>
+            <button class="btn btn-danger" onclick="endClassroom()">结束任务</button>
           </div>
         </div>
         
@@ -243,21 +250,76 @@
     </main>
   </div>
   
-  <!-- 创建课堂弹窗 -->
+  <!-- 创建模块弹窗 -->
+  <div id="create-module-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>创建模块</h3>
+        <button class="modal-close" onclick="closeCreateModuleModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="module-name-input">模块名称 *</label>
+          <input type="text" id="module-name-input" placeholder="例如：第一章 西方音乐鉴赏" required>
+        </div>
+        <div class="form-group">
+          <label for="module-desc-input">描述</label>
+          <textarea id="module-desc-input" rows="2" placeholder="可选的模块描述"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCreateModuleModal()">取消</button>
+        <button class="btn btn-primary" onclick="createModule()">创建</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 编辑模块弹窗 -->
+  <div id="edit-module-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>编辑模块</h3>
+        <button class="modal-close" onclick="closeEditModuleModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-module-id">
+        <div class="form-group">
+          <label for="edit-module-name-input">模块名称 *</label>
+          <input type="text" id="edit-module-name-input" placeholder="模块名称" required>
+        </div>
+        <div class="form-group">
+          <label for="edit-module-desc-input">描述</label>
+          <textarea id="edit-module-desc-input" rows="2" placeholder="可选的模块描述"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeEditModuleModal()">取消</button>
+        <button class="btn btn-primary" onclick="updateModule()">保存</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 创建任务弹窗 -->
   <div id="create-modal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>创建课堂</h3>
+        <h3>创建任务</h3>
         <button class="modal-close" onclick="closeCreateModal()">&times;</button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label for="classroom-name-input">课堂名称 *</label>
-          <input type="text" id="classroom-name-input" placeholder="例如：音乐鉴赏第一课" required>
+          <label for="task-module-select">所属模块</label>
+          <select id="task-module-select">
+            <option value="">无模块（独立任务）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="classroom-name-input">任务名称 *</label>
+          <input type="text" id="classroom-name-input" placeholder="例如：1.1 音乐的节奏与节拍" required>
         </div>
         <div class="form-group">
           <label for="classroom-desc-input">描述</label>
-          <textarea id="classroom-desc-input" rows="3" placeholder="可选"></textarea>
+          <textarea id="classroom-desc-input" rows="2" placeholder="可选"></textarea>
         </div>
         <div class="form-group">
           <label for="classroom-class-select">绑定班级</label>

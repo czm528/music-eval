@@ -2496,3 +2496,192 @@ textarea {
   margin-bottom: 8px;
   font-size: 14px;
 }
+
+/* ============ 模块化课程结构样式 ============ */
+
+/* 模块项 */
+.module-item {
+  margin-bottom: 8px;
+  background: var(--bg-white);
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.module-item.uncategorized {
+  border-style: dashed;
+  border-color: var(--text-muted);
+}
+
+.module-header {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.module-header:hover {
+  background: var(--bg-light);
+}
+
+.module-arrow {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-right: 8px;
+  transition: transform 0.2s;
+  width: 14px;
+  text-align: center;
+}
+
+.module-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.module-icon {
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+.module-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.module-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.module-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.module-header:hover .module-actions {
+  opacity: 1;
+}
+
+.btn-icon {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  background: var(--bg-light);
+}
+
+.btn-icon.btn-danger-icon:hover {
+  background: #fee2e2;
+}
+
+.module-tasks {
+  display: none;
+  padding: 0 14px 12px;
+}
+
+.module-tasks.expanded {
+  display: block;
+}
+
+/* 任务项 */
+.task-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-light);
+  border: 1px solid transparent;
+}
+
+.task-item:hover {
+  background: var(--primary-bg);
+  border-color: var(--primary-light);
+}
+
+.task-item.active {
+  background: var(--primary-bg);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.1);
+}
+
+.task-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.task-meta .status {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.task-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  background: var(--bg-light);
+  border-radius: var(--radius-sm);
+  margin-top: 8px;
+}
+
+/* 快速创建任务按钮 */
+.quick-create-task {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 8px;
+}
+
+.quick-create-task .btn {
+  width: 100%;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .module-actions {
+    opacity: 1;
+  }
+  
+  .task-meta {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+}

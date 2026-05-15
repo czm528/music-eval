@@ -1,10 +1,11 @@
 /**
- * 教师页面逻辑
+ * 教师页面逻辑 - 模块化改造版
  */
 
 // 全局变量
 let currentClassroom = null;
-let classroomList = [];
+let classroomList = []; // { modules: [...], uncategorized: [...] }
+let moduleList = []; // 用于创建任务时选择模块
 let radarChart = null;
 let distributionChart = null;
 let studentScoresChart = null;
@@ -18,6 +19,8 @@ const totalScoresPageSize = 10;
 // 音频题相关变量
 let selectedQuestionType = 'text';
 let selectedAudioFile = null;
+// 展开状态
+let expandedModules = new Set();
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -60,44 +63,299 @@ document.addEventListener('DOMContentLoaded', () => {
   startPing();
 });
 
-// 加载课堂列表
+// 加载课堂列表（按模块分组）
 async function loadClassrooms() {
   try {
     const res = await apiRequest('/api/teacher/classrooms');
     
     if (!res.success) {
-      showToast('加载课堂列表失败');
+      showToast('加载列表失败');
       return;
     }
     
-    classroomList = res.data || [];
+    classroomList = res.data || { modules: [], uncategorized: [] };
+    moduleList = classroomList.modules || [];
     renderClassroomList();
+    
+    // 更新创建任务弹窗中的模块选择
+    updateModuleSelect();
   } catch (error) {
-    console.error('加载课堂列表错误:', error);
+    console.error('加载列表错误:', error);
     showToast('网络错误');
   }
 }
 
 function renderClassroomList() {
   const container = document.getElementById('classroom-list');
+  const modules = classroomList.modules || [];
+  const uncategorized = classroomList.uncategorized || [];
+  const quickCreate = document.getElementById('quick-create-task');
   
-  if (classroomList.length === 0) {
-    container.innerHTML = '<p class="empty-state">暂无课堂，点击上方「新建」创建</p>';
+  let html = '';
+  
+  // 渲染模块
+  if (modules.length === 0 && uncategorized.length === 0) {
+    container.innerHTML = '<p class="empty-state">暂无模块和任务</p>';
+    quickCreate.style.display = 'block';
     return;
   }
   
-  container.innerHTML = classroomList.map(c => `
-    <div class="classroom-item ${currentClassroom && currentClassroom.id === c.id ? 'active' : ''}" 
-         onclick="selectClassroom(${c.id})">
-      <h4>${c.name}</h4>
-      <p>${c.description || '无描述'}</p>
-      <div class="meta">
-        <span>👥 ${c.student_count || 0}人</span>
-        <span>📝 ${c.question_count || 0}题</span>
-        <span class="status ${c.status}">${c.status === 'active' ? '进行中' : '已结束'}</span>
-      </div>
-    </div>
-  `).join('');
+  quickCreate.style.display = modules.length === 0 ? 'block' : 'none';
+  
+  // 渲染模块
+  modules.forEach(module => {
+    const isExpanded = expandedModules.has(module.id);
+    const taskCount = module.tasks ? module.tasks.length : 0;
+    
+    html += `
+      <div class="module-item" data-module-id="${module.id}">
+        <div class="module-header" onclick="toggleModule(${module.id})">
+          <span class="module-arrow ${isExpanded ? 'expanded' : ''}">▶</span>
+          <span class="module-icon">📂</span>
+          <span class="module-name">${escapeHtml(module.name)}</span>
+          <span class="module-count">(${taskCount})</span>
+          <div class="module-actions" onclick="event.stopPropagation()">
+            <button class="btn-icon" onclick="showCreateTask(${module.id})" title="添加任务">➕</button>
+            <button class="btn-icon" onclick="showEditModule(${module.id}, '${escapeHtml(module.name)}', '${escapeHtml(module.description || '')}')" title="编辑">✏️</button>
+            <button class="btn-icon btn-danger-icon" onclick="deleteModule(${module.id})" title="删除">🗑️</button>
+          </div>
+        </div>
+        <div class="module-tasks ${isExpanded ? 'expanded' : ''}">
+    `;
+    
+    // 渲染模块下的任务
+    if (module.tasks && module.tasks.length > 0) {
+      module.tasks.forEach(task => {
+        const isActive = currentClassroom && currentClassroom.id === task.id;
+        html += `
+          <div class="task-item ${isActive ? 'active' : ''}" onclick="selectClassroom(${task.id})">
+            <span class="task-name">${escapeHtml(task.name)}</span>
+            <div class="task-meta">
+              <span>👥 ${task.student_count || 0}</span>
+              <span class="status ${task.status}">${task.status === 'active' ? '进行中' : '已结束'}</span>
+            </div>
+          </div>
+        `;
+      });
+    } else {
+      html += `<div class="task-empty">暂无任务，点击➕添加</div>`;
+    }
+    
+    html += `</div></div>`;
+  });
+  
+  // 渲染未归类任务
+  if (uncategorized.length > 0) {
+    html += `
+      <div class="module-item uncategorized">
+        <div class="module-header" onclick="toggleModule('uncategorized')">
+          <span class="module-arrow ${expandedModules.has('uncategorized') ? 'expanded' : ''}">▶</span>
+          <span class="module-icon">📋</span>
+          <span class="module-name">未归类任务</span>
+          <span class="module-count">(${uncategorized.length})</span>
+        </div>
+        <div class="module-tasks ${expandedModules.has('uncategorized') ? 'expanded' : ''}">
+    `;
+    
+    uncategorized.forEach(task => {
+      const isActive = currentClassroom && currentClassroom.id === task.id;
+      html += `
+        <div class="task-item ${isActive ? 'active' : ''}" onclick="selectClassroom(${task.id})">
+          <span class="task-name">${escapeHtml(task.name)}</span>
+          <div class="task-meta">
+            <span>👥 ${task.student_count || 0}</span>
+            <span class="status ${task.status}">${task.status === 'active' ? '进行中' : '已结束'}</span>
+          </div>
+        </div>
+      `;
+    });
+    
+    html += `</div></div>`;
+  }
+  
+  container.innerHTML = html;
+}
+
+// 切换模块展开/折叠
+function toggleModule(moduleId) {
+  if (expandedModules.has(moduleId)) {
+    expandedModules.delete(moduleId);
+  } else {
+    expandedModules.add(moduleId);
+  }
+  renderClassroomList();
+}
+
+// 显示创建模块弹窗
+function showCreateModule() {
+  document.getElementById('create-module-modal').classList.add('show');
+  document.getElementById('module-name-input').value = '';
+  document.getElementById('module-desc-input').value = '';
+}
+
+// 关闭创建模块弹窗
+function closeCreateModuleModal() {
+  document.getElementById('create-module-modal').classList.remove('show');
+}
+
+// 创建模块
+async function createModule() {
+  const name = document.getElementById('module-name-input').value.trim();
+  const description = document.getElementById('module-desc-input').value.trim();
+  
+  if (!name) {
+    showToast('请输入模块名称');
+    return;
+  }
+  
+  const btn = document.querySelector('#create-module-modal .btn-primary');
+  btn.disabled = true;
+  btn.textContent = '创建中...';
+  
+  try {
+    const res = await apiRequest('/api/teacher/modules', {
+      method: 'POST',
+      body: { name, description }
+    });
+    
+    btn.disabled = false;
+    btn.textContent = '创建';
+    
+    if (res.success) {
+      showToast('模块创建成功');
+      closeCreateModuleModal();
+      await loadClassrooms();
+      // 展开新创建的模块
+      if (res.data.id) {
+        expandedModules.add(res.data.id);
+        renderClassroomList();
+      }
+    } else {
+      showToast(res.message || '创建失败');
+    }
+  } catch (error) {
+    console.error('创建模块错误:', error);
+    btn.disabled = false;
+    btn.textContent = '创建';
+    showToast('网络错误');
+  }
+}
+
+// 显示编辑模块弹窗
+function showEditModule(moduleId, name, description) {
+  document.getElementById('edit-module-id').value = moduleId;
+  document.getElementById('edit-module-name-input').value = name;
+  document.getElementById('edit-module-desc-input').value = description;
+  document.getElementById('edit-module-modal').classList.add('show');
+}
+
+// 关闭编辑模块弹窗
+function closeEditModuleModal() {
+  document.getElementById('edit-module-modal').classList.remove('show');
+}
+
+// 更新模块
+async function updateModule() {
+  const moduleId = document.getElementById('edit-module-id').value;
+  const name = document.getElementById('edit-module-name-input').value.trim();
+  const description = document.getElementById('edit-module-desc-input').value.trim();
+  
+  if (!name) {
+    showToast('请输入模块名称');
+    return;
+  }
+  
+  const btn = document.querySelector('#edit-module-modal .btn-primary');
+  btn.disabled = true;
+  btn.textContent = '保存中...';
+  
+  try {
+    const res = await apiRequest(`/api/teacher/modules/${moduleId}`, {
+      method: 'PUT',
+      body: { name, description }
+    });
+    
+    btn.disabled = false;
+    btn.textContent = '保存';
+    
+    if (res.success) {
+      showToast('模块更新成功');
+      closeEditModuleModal();
+      await loadClassrooms();
+    } else {
+      showToast(res.message || '更新失败');
+    }
+  } catch (error) {
+    console.error('更新模块错误:', error);
+    btn.disabled = false;
+    btn.textContent = '保存';
+    showToast('网络错误');
+  }
+}
+
+// 删除模块
+async function deleteModule(moduleId) {
+  if (!confirm('确定要删除这个模块吗？模块下的任务不会被删除，只会变为未归类状态。')) {
+    return;
+  }
+  
+  try {
+    const res = await apiRequest(`/api/teacher/modules/${moduleId}`, {
+      method: 'DELETE'
+    });
+    
+    if (res.success) {
+      showToast('模块删除成功');
+      expandedModules.delete(moduleId);
+      await loadClassrooms();
+    } else {
+      showToast(res.message || '删除失败');
+    }
+  } catch (error) {
+    console.error('删除模块错误:', error);
+    showToast('网络错误');
+  }
+}
+
+// 显示创建任务弹窗（指定模块）
+function showCreateTask(moduleId) {
+  document.getElementById('task-module-select').value = moduleId;
+  showCreateTaskModal();
+}
+
+// 显示无模块的创建任务弹窗
+function showCreateTaskNoModule() {
+  document.getElementById('task-module-select').value = '';
+  showCreateTaskModal();
+}
+
+// 显示创建任务弹窗（通用）
+function showCreateTaskModal() {
+  // 确保模块选择是最新的
+  updateModuleSelect();
+  document.getElementById('create-modal').classList.add('show');
+  document.getElementById('classroom-name-input').value = '';
+  document.getElementById('classroom-desc-input').value = '';
+}
+
+// 更新模块选择下拉框
+function updateModuleSelect() {
+  const select = document.getElementById('task-module-select');
+  let html = '<option value="">无模块（独立任务）</option>';
+  
+  moduleList.forEach(m => {
+    html += `<option value="${m.id}">${escapeHtml(m.name)}</option>`;
+  });
+  
+  select.innerHTML = html;
+}
+
+// HTML转义
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // 选择课堂
@@ -1082,11 +1340,9 @@ function renderAnswerList(answers) {
   `).join('');
 }
 
-// 显示创建课堂弹窗
+// 显示创建课堂弹窗（兼容旧调用）
 function showCreateClassroom() {
-  document.getElementById('create-modal').classList.add('show');
-  document.getElementById('classroom-name-input').value = '';
-  document.getElementById('classroom-desc-input').value = '';
+  showCreateTaskNoModule();
 }
 
 // 关闭创建弹窗
@@ -1094,13 +1350,14 @@ function closeCreateModal() {
   document.getElementById('create-modal').classList.remove('show');
 }
 
-// 创建课堂
+// 创建课堂/任务
 async function createClassroom() {
   const name = document.getElementById('classroom-name-input').value.trim();
   const description = document.getElementById('classroom-desc-input').value.trim();
+  const moduleId = document.getElementById('task-module-select').value;
   
   if (!name) {
-    showToast('请输入课堂名称');
+    showToast('请输入任务名称');
     return;
   }
   
@@ -1113,7 +1370,8 @@ async function createClassroom() {
       method: 'POST',
       body: {
         name: name,
-        description: description
+        description: description,
+        moduleId: moduleId || null
       }
     });
     
@@ -1121,10 +1379,10 @@ async function createClassroom() {
     createBtn.textContent = '创建';
     
     if (res.success) {
-      showToast('课堂创建成功');
+      showToast('任务创建成功');
       closeCreateModal();
       
-      // 刷新课堂列表
+      // 刷新列表
       await loadClassrooms();
       
       // 如果返回了二维码，直接打开二维码弹窗
@@ -1136,15 +1394,19 @@ async function createClassroom() {
         showQRCode();
       }
       
-      // 选择新创建的课堂
+      // 选择新创建的任务
       if (res.data.id) {
+        // 确保对应模块展开
+        if (moduleId) {
+          expandedModules.add(parseInt(moduleId));
+        }
         selectClassroom(res.data.id);
       }
     } else {
       showToast(res.message || '创建失败');
     }
   } catch (error) {
-    console.error('创建课堂错误:', error);
+    console.error('创建任务错误:', error);
     createBtn.disabled = false;
     createBtn.textContent = '创建';
     showToast('网络错误');
