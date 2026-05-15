@@ -350,7 +350,8 @@ router.post('/answers/audio', (req, res) => {
       // 如果是音频题且有参考音频，调用Node.js音准分析
       if (question.question_type === 'audio' && question.reference_audio) {
         try {
-          const refPath = path.join(__dirname, '..', question.reference_audio.replace(/^\//, ''));
+          const dataDir = req.app.get('dataDir') || path.join(__dirname, '..');
+          const refPath = path.join(dataDir, question.reference_audio.replace(/^\//, ''));
           const result = await analyzePitch(req.file.path, refPath);
           
           if (result) {

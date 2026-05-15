@@ -87,10 +87,13 @@ app.use(session({
 // 静态文件服务
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 数据目录 - 优先使用持久卷
+const dataDir = process.env.DATA_DIR || __dirname;
+
 // 音频文件上传配置
 const audioStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = './uploads/audio';
+    const dir = path.join(dataDir, 'uploads/audio');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -114,11 +117,12 @@ const audioUpload = multer({
   }
 });
 
-// 静态文件服务 - 音频文件
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// 静态文件服务 - 音频文件（从持久卷目录serve）
+app.use('/uploads', express.static(path.join(dataDir, 'uploads')));
 
 // 把 audioUpload 挂到 app 上供路由使用
 app.set('audioUpload', audioUpload);
+app.set('dataDir', dataDir);
 
 // 路由配置
 const authRoutes = require('./routes/auth');
