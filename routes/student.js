@@ -246,6 +246,7 @@ router.post('/answers', async (req, res) => {
     }
     
     // 保存回答（如已有则更新）
+    let answerId;
     if (existingAnswer) {
       db.prepare(`
         UPDATE answers SET content = ?, evaluation = ?, dimensions = ?, total_score = ?, 
@@ -260,8 +261,9 @@ router.post('/answers', async (req, res) => {
         evaluation.method,
         questionId, user.id
       );
+      answerId = existingAnswer.id;
     } else {
-      db.prepare(`
+      const insertResult = db.prepare(`
         INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -274,6 +276,7 @@ router.post('/answers', async (req, res) => {
         evaluation.comment,
         evaluation.method
       );
+      answerId = insertResult.lastInsertRowid;
     }
     
     // 更新学生素养记录 - 只更新选中的维度
@@ -300,7 +303,7 @@ router.post('/answers', async (req, res) => {
       success: true,
       message: '回答已提交',
       data: {
-        answerId: result.lastInsertRowid,
+        answerId,
         totalScore: evaluation.totalScore,
         dimensions: evaluation.dimensions,
         dimensionDetails: evaluation.dimensionDetails,
@@ -378,6 +381,7 @@ router.post('/answers/audio', (req, res) => {
       const student = db.prepare('SELECT * FROM students WHERE id = ?').get(user.id);
       
       // 保存回答（如已有则更新）
+      let answerId;
       if (existing) {
         db.prepare(`
           UPDATE answers SET content = ?, evaluation = ?, dimensions = ?, total_score = ?, 
@@ -396,8 +400,9 @@ router.post('/answers/audio', (req, res) => {
           pitchCurve,
           questionId, user.id
         );
+        answerId = existing.id;
       } else {
-        db.prepare(`
+        const insertResult = db.prepare(`
           INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method, audio_file, pitch_score, pitch_deviation, pitch_curve)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
@@ -412,6 +417,7 @@ router.post('/answers/audio', (req, res) => {
           pitchDeviation,
           pitchCurve
         );
+        answerId = insertResult.lastInsertRowid;
       }
       
       // Socket广播
@@ -430,7 +436,7 @@ router.post('/answers/audio', (req, res) => {
         success: true,
         message: '回答已提交',
         data: {
-          answerId: existing ? existing.id : result.lastInsertRowid,
+          answerId,
           score: evaluation.totalScore,
           dimensions: evaluation.dimensions,
           comment: evaluation.comment,
@@ -441,7 +447,7 @@ router.post('/answers/audio', (req, res) => {
       });
     } catch (error) {
       console.error('提交音频回答错误:', error);
-      res.json({ success: false, message: '提交失败' });
+      res.json({ success: false, message: '提交失败: ' + (error.message || '未知错误') });
     }
   });
 });

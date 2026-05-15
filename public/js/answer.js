@@ -513,6 +513,7 @@ async function submitAudioAnswer() {
     const res = await fetch('/api/student/answers/audio', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
+      credentials: 'include',
       body: formData
     });
     
