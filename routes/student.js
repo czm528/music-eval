@@ -214,14 +214,10 @@ router.post('/answers', async (req, res) => {
       return res.json({ success: false, message: '问题已结束' });
     }
     
-    // 检查是否已回答
+    // 检查是否已回答 - 允许重新提交
     const existingAnswer = db.prepare('SELECT * FROM answers WHERE question_id = ? AND student_id = ?').get(
       questionId, user.id
     );
-    
-    if (existingAnswer) {
-      return res.json({ success: false, message: '您已提交过回答' });
-    }
     
     // 获取学生信息
     const student = db.prepare('SELECT * FROM students WHERE id = ?').get(user.id);
@@ -249,20 +245,36 @@ router.post('/answers', async (req, res) => {
       evaluation = keywordEval.evaluate(question.content, content, selectedDimensions);
     }
     
-    // 保存回答
-    const result = db.prepare(`
-      INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      questionId,
-      user.id,
-      content,
-      JSON.stringify(evaluation),
-      JSON.stringify(evaluation.dimensions),
-      evaluation.totalScore,
-      evaluation.comment,
-      evaluation.method
-    );
+    // 保存回答（如已有则更新）
+    if (existingAnswer) {
+      db.prepare(`
+        UPDATE answers SET content = ?, evaluation = ?, dimensions = ?, total_score = ?, 
+          comment = ?, eval_method = ?, evaluated_at = CURRENT_TIMESTAMP
+        WHERE question_id = ? AND student_id = ?
+      `).run(
+        content,
+        JSON.stringify(evaluation),
+        JSON.stringify(evaluation.dimensions),
+        evaluation.totalScore,
+        evaluation.comment,
+        evaluation.method,
+        questionId, user.id
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        questionId,
+        user.id,
+        content,
+        JSON.stringify(evaluation),
+        JSON.stringify(evaluation.dimensions),
+        evaluation.totalScore,
+        evaluation.comment,
+        evaluation.method
+      );
+    }
     
     // 更新学生素养记录 - 只更新选中的维度
     updateCompetencyRecord(db, user.id, evaluation.dimensions, selectedDimensions);
@@ -326,11 +338,8 @@ router.post('/answers/audio', (req, res) => {
         return res.json({ success: false, message: '问题不存在' });
       }
       
-      // 检查是否已回答
+      // 检查是否已回答 - 允许重新提交，更新旧答案
       const existing = db.prepare('SELECT * FROM answers WHERE question_id = ? AND student_id = ?').get(questionId, user.id);
-      if (existing) {
-        return res.json({ success: false, message: '您已提交过回答' });
-      }
       
       const audioPath = `/uploads/audio/${req.file.filename}`;
       let pitchScore = null;
@@ -366,21 +375,40 @@ router.post('/answers/audio', (req, res) => {
       
       const student = db.prepare('SELECT * FROM students WHERE id = ?').get(user.id);
       
-      // 保存回答
-      const result = db.prepare(`
-        INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method, audio_file, pitch_score, pitch_deviation)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        questionId, user.id, content,
-        JSON.stringify(evaluation),
-        JSON.stringify(evaluation.dimensions),
-        evaluation.totalScore,
-        evaluation.comment,
-        evaluation.method,
-        audioPath,
-        pitchScore,
-        pitchDeviation
-      );
+      // 保存回答（如已有则更新）
+      if (existing) {
+        db.prepare(`
+          UPDATE answers SET content = ?, evaluation = ?, dimensions = ?, total_score = ?, 
+            comment = ?, eval_method = ?, audio_file = ?, pitch_score = ?, pitch_deviation = ?, evaluated_at = CURRENT_TIMESTAMP
+          WHERE question_id = ? AND student_id = ?
+        `).run(
+          content,
+          JSON.stringify(evaluation),
+          JSON.stringify(evaluation.dimensions),
+          evaluation.totalScore,
+          evaluation.comment,
+          evaluation.method,
+          audioPath,
+          pitchScore,
+          pitchDeviation,
+          questionId, user.id
+        );
+      } else {
+        db.prepare(`
+          INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method, audio_file, pitch_score, pitch_deviation)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          questionId, user.id, content,
+          JSON.stringify(evaluation),
+          JSON.stringify(evaluation.dimensions),
+          evaluation.totalScore,
+          evaluation.comment,
+          evaluation.method,
+          audioPath,
+          pitchScore,
+          pitchDeviation
+        );
+      }
       
       // Socket广播
       const io = req.app.get('io');

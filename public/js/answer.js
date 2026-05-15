@@ -253,11 +253,6 @@ async function submitAnswer() {
     return;
   }
   
-  if (hasAnswered) {
-    showToast('您已提交过回答');
-    return;
-  }
-  
   const content = document.getElementById('answer-input').value.trim();
   
   if (!content) {
@@ -529,6 +524,24 @@ async function submitAudioAnswer() {
     document.getElementById('submit-audio-btn').textContent = '提交演唱';
     document.getElementById('submit-audio-btn').disabled = false;
   }
+}
+
+// 重新回答
+function retryAnswer() {
+  // 重置已回答状态，允许重新提交
+  hasAnswered = false;
+  
+  // 隐藏结果区域，显示答题区域
+  document.getElementById('answer-result-section').classList.add('hidden');
+  document.getElementById('answer-form-section').classList.remove('hidden');
+  
+  // 清空之前的输入
+  document.getElementById('answer-input').value = '';
+  
+  // 如果是音频题，重置录音状态
+  removeAudio();
+  
+  showToast('可以重新回答了');
 }
 
 // ============ Socket事件处理 ============
