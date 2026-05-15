@@ -312,9 +312,9 @@ async function convertToWav(blob) {
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
   
   const numChannels = 1;
-  const sampleRate = 44100;
+  const sampleRate = 22050; // 音准检测22050足够，文件比44100小一半
   
-  const offlineCtx = new OfflineAudioContext(numChannels, audioBuffer.duration * sampleRate, sampleRate);
+  const offlineCtx = new OfflineAudioContext(numChannels, Math.ceil(audioBuffer.duration * sampleRate), sampleRate);
   const source = offlineCtx.createBufferSource();
   source.buffer = audioBuffer;
   source.connect(offlineCtx.destination);

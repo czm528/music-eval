@@ -320,17 +320,31 @@ async function publishQuestion() {
     
     if (selectedAudioFile) {
       // 浏览器端转码为WAV，服务端只需要处理WAV格式
-      const wavBlob = await convertToWav(selectedAudioFile);
-      formData.append('reference_audio', wavBlob, 'reference.wav');
+      try {
+        const wavBlob = await convertToWav(selectedAudioFile);
+        formData.append('reference_audio', wavBlob, 'reference.wav');
+      } catch (e) {
+        publishBtn.disabled = false;
+        publishBtn.textContent = '发布问题';
+        showToast('音频转码失败，请尝试较短的音频文件');
+        return;
+      }
     }
     
     const token = getToken();
-    publishBtn.textContent = '发布中...';
+    publishBtn.textContent = '上传中...';
+    
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000); // 60秒超时
+    
     const res = await fetch('/api/teacher/questions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
-      body: formData
+      body: formData,
+      signal: controller.signal
     });
+    
+    clearTimeout(timeout);
     
     const data = await res.json();
     
@@ -355,7 +369,11 @@ async function publishQuestion() {
     console.error('发布问题错误:', error);
     publishBtn.disabled = false;
     publishBtn.textContent = '发布问题';
-    showToast('网络错误');
+    if (error.name === 'AbortError') {
+      showToast('上传超时，请尝试较短的音频文件');
+    } else {
+      showToast('网络错误');
+    }
   }
 }
 
