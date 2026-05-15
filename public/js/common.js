@@ -304,3 +304,56 @@ function isMobile() {
 function isTouchDevice() {
   return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 }
+
+// 浏览器端将音频文件转码为WAV格式（服务端不需要ffmpeg）
+async function convertToWav(blob) {
+  const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  const arrayBuffer = await blob.arrayBuffer();
+  const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+  
+  const numChannels = 1;
+  const sampleRate = 44100;
+  
+  const offlineCtx = new OfflineAudioContext(numChannels, audioBuffer.duration * sampleRate, sampleRate);
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(offlineCtx.destination);
+  source.start();
+  const renderedBuffer = await offlineCtx.startRendering();
+  
+  const channelData = renderedBuffer.getChannelData(0);
+  const dataLength = channelData.length * 2;
+  const headerLength = 44;
+  const totalLength = headerLength + dataLength;
+  
+  const wavBuffer = new ArrayBuffer(totalLength);
+  const view = new DataView(wavBuffer);
+  
+  function writeStr(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+  
+  writeStr(0, 'RIFF');
+  view.setUint32(4, totalLength - 8, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * 2, true);
+  view.setUint16(32, numChannels * 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataLength, true);
+  
+  let offset = 44;
+  for (let i = 0; i < channelData.length; i++) {
+    const s = Math.max(-1, Math.min(1, channelData[i]));
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    offset += 2;
+  }
+  
+  audioContext.close();
+  return new Blob([wavBuffer], { type: 'audio/wav' });
+}

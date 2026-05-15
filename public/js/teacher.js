@@ -270,7 +270,7 @@ async function publishQuestion() {
   
   const publishBtn = document.querySelector('.question-panel .btn-primary');
   publishBtn.disabled = true;
-  publishBtn.textContent = '发布中...';
+  publishBtn.textContent = '转码中...';
   
   try {
     const formData = new FormData();
@@ -280,10 +280,13 @@ async function publishQuestion() {
     formData.append('questionType', selectedQuestionType);
     
     if (selectedAudioFile) {
-      formData.append('reference_audio', selectedAudioFile);
+      // 浏览器端转码为WAV，服务端只需要处理WAV格式
+      const wavBlob = await convertToWav(selectedAudioFile);
+      formData.append('reference_audio', wavBlob, 'reference.wav');
     }
     
     const token = getToken();
+    publishBtn.textContent = '发布中...';
     const res = await fetch('/api/teacher/questions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
