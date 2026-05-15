@@ -1,38 +1,79 @@
 /**
- * 纯Node.js音准分析模块
- * 使用 pitchfinder(YIN算法) 提取音高曲线，简单对齐后计算偏差
+ * 音准分析模块
+ * 使用 ffmpeg 转码 + pitchfinder(YIN算法) 提取音高曲线
  */
 const fs = require('fs');
 const path = require('path');
+const { execFile } = require('child_process');
 const Pitchfinder = require('pitchfinder');
+const WavDecoder = require('wav-decoder');
+
+/**
+ * 用ffmpeg将音频转为WAV（单声道16kHz，足够音准检测）
+ */
+function convertToWavWithFfmpeg(inputPath) {
+  return new Promise((resolve, reject) => {
+    const outputPath = inputPath + '.conv.wav';
+    execFile('ffmpeg', [
+      '-y', '-i', inputPath,
+      '-ar', '16000',    // 16kHz采样率，文件小且足够音准检测
+      '-ac', '1',        // 单声道
+      '-sample_fmt', 's16',
+      outputPath
+    ], { timeout: 30000 }, (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(outputPath);
+      }
+    });
+  });
+}
+
+/**
+ * 解码音频文件为PCM数据（自动用ffmpeg转码非WAV格式）
+ */
+async function decodeAudio(filePath) {
+  let wavPath = filePath;
+  let converted = false;
+  
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext !== '.wav') {
+    // 非WAV格式，先用ffmpeg转码
+    wavPath = await convertToWavWithFfmpeg(filePath);
+    converted = true;
+  }
+  
+  try {
+    const buffer = fs.readFileSync(wavPath);
+    const decoded = await WavDecoder.decode(buffer);
+    return decoded;
+  } finally {
+    // 清理临时转码文件
+    if (converted && fs.existsSync(wavPath)) {
+      try { fs.unlinkSync(wavPath); } catch (e) {}
+    }
+  }
+}
 
 /**
  * 分析学生演唱与标准参考的音准偏差
- * @param {string} studentPath - 学生演唱音频文件路径
- * @param {string} referencePath - 标准参考音频文件路径
- * @returns {object|null} 分析结果
  */
 async function analyzePitch(studentPath, referencePath) {
-  const WavDecoder = require('wav-decoder');
-  
   try {
-    // 1. 读取并解码WAV音频文件（浏览器端已转码为WAV格式）
-    const studentBuffer = fs.readFileSync(studentPath);
-    const referenceBuffer = fs.readFileSync(referencePath);
-    
-    const studentDecoded = await WavDecoder.decode(studentBuffer);
-    const referenceDecoded = await WavDecoder.decode(referenceBuffer);
+    const studentDecoded = await decodeAudio(studentPath);
+    const referenceDecoded = await decodeAudio(referencePath);
     
     if (!studentDecoded || !referenceDecoded) {
       return null;
     }
     
-    // 2. 提取单声道数据
+    // 提取单声道数据
     const studentAudio = studentDecoded.channelData[0];
     const referenceAudio = referenceDecoded.channelData[0];
     const sampleRate = studentDecoded.sampleRate;
     
-    // 3. 逐帧检测音高（帧长2048，步长512）
+    // 逐帧检测音高（帧长2048，步长512）
     const frameSize = 2048;
     const hopSize = 512;
     const detectPitch = Pitchfinder.YIN({ sampleRate, threshold: 0.2 });
@@ -40,7 +81,7 @@ async function analyzePitch(studentPath, referencePath) {
     const refPitches = extractPitches(referenceAudio, detectPitch, frameSize, hopSize);
     const stuPitches = extractPitches(studentAudio, detectPitch, frameSize, hopSize);
     
-    // 4. 过滤无效音高（null值）
+    // 过滤无效音高
     const refVoiced = refPitches.filter(p => p !== null);
     const stuVoiced = stuPitches.filter(p => p !== null);
     
@@ -48,25 +89,22 @@ async function analyzePitch(studentPath, referencePath) {
       return null;
     }
     
-    // 5. 转换为音分（cents），以参考音频中位数为基准
+    // 转换为音分（cents），以参考音频中位数为基准
     const refMedian = median(refVoiced);
     const refCents = refVoiced.map(f => 1200 * Math.log2(f / refMedian));
     const stuCents = stuVoiced.map(f => 1200 * Math.log2(f / refMedian));
     
-    // 6. 简单对齐：重采样到相同长度
+    // 重采样到相同长度
     const targetLen = Math.max(refCents.length, stuCents.length);
     const refResampled = resample(refCents, targetLen);
     const stuResampled = resample(stuCents, targetLen);
     
-    // 7. 计算偏差
+    // 计算偏差
     const deviations = stuResampled.map((s, i) => Math.abs(s - refResampled[i]));
     const avgDeviation = mean(deviations);
     const maxDeviation = Math.max(...deviations);
     
-    // 8. 音高匹配率（偏差<50音分的比例）
     const pitchMatchRate = deviations.filter(d => d < 50).length / deviations.length;
-    
-    // 9. 偏差映射为分数
     const score = deviationToScore(avgDeviation);
     
     return {
@@ -84,9 +122,6 @@ async function analyzePitch(studentPath, referencePath) {
   }
 }
 
-/**
- * 逐帧提取音高
- */
 function extractPitches(audioData, detectPitch, frameSize, hopSize) {
   const pitches = [];
   for (let i = 0; i + frameSize <= audioData.length; i += hopSize) {
@@ -97,9 +132,6 @@ function extractPitches(audioData, detectPitch, frameSize, hopSize) {
   return pitches;
 }
 
-/**
- * 重采样数组到目标长度（线性插值）
- */
 function resample(arr, targetLen) {
   if (arr.length === targetLen) return arr;
   const result = [];
@@ -126,9 +158,6 @@ function mean(arr) {
   return arr.reduce((s, v) => s + v, 0) / arr.length;
 }
 
-/**
- * 将平均音分偏差映射为100分制得分（宽松版）
- */
 function deviationToScore(avgDeviation) {
   if (avgDeviation <= 30) return Math.round((90 + (30 - avgDeviation) / 30 * 10) * 10) / 10;
   if (avgDeviation <= 50) return Math.round((75 + (50 - avgDeviation) / 20 * 15) * 10) / 10;
