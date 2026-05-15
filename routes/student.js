@@ -373,7 +373,7 @@ router.post('/answers/audio', (req, res) => {
         dimensions: { pitch: pitchScore || 0 },
         totalScore: pitchScore || 0,
         comment: pitchScore !== null 
-          ? `音准得分${pitchScore}分，平均偏差${pitchDeviation}音分。${pitchScore >= 75 ? '音准表现不错！' : pitchScore >= 50 ? '音准有待提高，注意听准音高再唱。' : '音准偏差较大，建议多听标准旋律，跟唱练习。'}`
+          ? `音准得分${pitchScore}分。${pitchScore >= 90 ? '音准很棒，旋律掌握得很好！' : pitchScore >= 75 ? '音准不错，能听出旋律走向，继续加油！' : pitchScore >= 60 ? '基本完成了演唱，多听几遍参考旋律会有帮助。' : '勇敢地唱出来了！建议多听参考旋律，跟着哼唱练习。'}`
           : '音频已收到，待教师评价。',
         method: pitchScore !== null ? 'pitch-analysis' : 'pending'
       };

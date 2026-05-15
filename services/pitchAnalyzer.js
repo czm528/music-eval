@@ -176,11 +176,17 @@ function mean(arr) {
 }
 
 function deviationToScore(avgDeviation) {
-  if (avgDeviation <= 30) return Math.round((90 + (30 - avgDeviation) / 30 * 10) * 10) / 10;
-  if (avgDeviation <= 50) return Math.round((75 + (50 - avgDeviation) / 20 * 15) * 10) / 10;
-  if (avgDeviation <= 80) return Math.round((60 + (80 - avgDeviation) / 30 * 15) * 10) / 10;
-  if (avgDeviation <= 120) return Math.round((40 + (120 - avgDeviation) / 40 * 20) * 10) / 10;
-  return Math.round(Math.max(0, 40 - (avgDeviation - 120) / 80 * 40) * 10) / 10;
+  // 宽松评分标准（面向非专业学生）：
+  // 50 cents(1/4半音)以内 → 90~100  基本在调上，表现很好
+  // 100 cents(1个半音)以内 → 75~90  能听出旋律走向，不错
+  // 150 cents(1.5半音)以内 → 60~75  有跑调但方向对
+  // 200 cents(2个半音)以内 → 45~60  跑调较明显
+  // 200+ → 30~45  保底分，至少在唱
+  if (avgDeviation <= 50) return Math.round((90 + (50 - avgDeviation) / 50 * 10) * 10) / 10;
+  if (avgDeviation <= 100) return Math.round((75 + (100 - avgDeviation) / 50 * 15) * 10) / 10;
+  if (avgDeviation <= 150) return Math.round((60 + (150 - avgDeviation) / 50 * 15) * 10) / 10;
+  if (avgDeviation <= 200) return Math.round((45 + (200 - avgDeviation) / 50 * 15) * 10) / 10;
+  return Math.round(Math.max(30, 45 - (avgDeviation - 200) / 100 * 15) * 10) / 10;
 }
 
 function getScoreDescription(score) {
