@@ -219,11 +219,17 @@ router.post('/questions', (req, res) => {
   
   audioUpload.single('reference_audio')(req, res, (err) => {
     if (err) {
+      console.error('音频上传错误:', err.message);
       return res.json({ success: false, message: '文件上传失败: ' + err.message });
     }
     
     const { classroomId, content, dimensions, questionType } = req.body;
     const user = req.sessionUser || req.session.user;
+    
+    if (!user) {
+      return res.json({ success: false, message: '请先登录' });
+    }
+    
     const db = getDatabase();
     
     try {

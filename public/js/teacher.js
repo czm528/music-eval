@@ -328,6 +328,7 @@ async function publishQuestion() {
     const res = await fetch('/api/teacher/questions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` },
+      credentials: 'include',
       body: formData
     });
     
@@ -345,8 +346,11 @@ async function publishQuestion() {
       // 重置题目类型
       switchQuestionType('text');
       
-      // 刷新课堂数据
-      selectClassroom(currentClassroom.id);
+      // 延迟刷新课堂数据，确保数据库已写入
+      setTimeout(() => {
+        isLoadingClassroom = false; // 重置锁，确保能刷新
+        selectClassroom(currentClassroom.id);
+      }, 500);
     } else {
       showToast(data.message || '发布失败');
     }
