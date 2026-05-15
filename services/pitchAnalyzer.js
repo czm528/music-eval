@@ -89,15 +89,23 @@ async function analyzePitch(studentPath, referencePath) {
       return null;
     }
     
-    // 转换为音分（cents），以参考音频中位数为基准
+    // 转换为音分（cents），各自以自身中位数为基准
+    // 这样比较的是"旋律走向"是否正确，而非绝对音高
+    // 避免男女声差八度、八度误判等导致离谱的偏差值
     const refMedian = median(refVoiced);
+    const stuMedian = median(stuVoiced);
     const refCents = refVoiced.map(f => 1200 * Math.log2(f / refMedian));
-    const stuCents = stuVoiced.map(f => 1200 * Math.log2(f / refMedian));
+    const stuCents = stuVoiced.map(f => 1200 * Math.log2(f / stuMedian));
+    
+    // 八度校正：如果两条曲线整体偏移了若干个八度，自动对齐
+    // 找到使平均偏差最小的八度偏移量
+    const octShift = findBestOctaveShift(refCents, stuCents);
+    const stuCentsShifted = stuCents.map(c => c + octShift * 1200);
     
     // 重采样到相同长度
-    const targetLen = Math.max(refCents.length, stuCents.length);
+    const targetLen = Math.max(refCents.length, stuCentsShifted.length);
     const refResampled = resample(refCents, targetLen);
-    const stuResampled = resample(stuCents, targetLen);
+    const stuResampled = resample(stuCentsShifted, targetLen);
     
     // 计算偏差
     const deviations = stuResampled.map((s, i) => Math.abs(s - refResampled[i]));
@@ -169,6 +177,37 @@ function median(arr) {
   const sorted = [...arr].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * 找到最佳八度偏移量，使两条曲线的平均偏差最小
+ * 解决男女声差八度、pitchfinder八度误判等问题
+ */
+function findBestOctaveShift(refCents, stuCents) {
+  // 用采样点来快速评估（取最多200个点）
+  const maxSample = 200;
+  const refSample = refCents.length > maxSample ? downsample(refCents, maxSample) : refCents;
+  const stuSample = stuCents.length > maxSample ? downsample(stuCents, maxSample) : stuCents;
+  
+  // 对齐长度
+  const len = Math.max(refSample.length, stuSample.length);
+  const refR = resample(refSample, len);
+  const stuR = resample(stuSample, len);
+  
+  let bestShift = 0;
+  let bestDeviation = Infinity;
+  
+  // 尝试 -2 到 +2 个八度的偏移
+  for (let oct = -2; oct <= 2; oct++) {
+    const shifted = stuR.map(c => c + oct * 1200);
+    const avgDev = mean(shifted.map((s, i) => Math.abs(s - refR[i])));
+    if (avgDev < bestDeviation) {
+      bestDeviation = avgDev;
+      bestShift = oct;
+    }
+  }
+  
+  return bestShift;
 }
 
 function mean(arr) {
