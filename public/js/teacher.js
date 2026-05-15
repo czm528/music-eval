@@ -334,11 +334,11 @@ function showMoveTask(taskId, taskName) {
     select.innerHTML += `<option value="${m.id}">${escapeHtml(m.name)}</option>`;
   });
   
-  document.getElementById('move-task-modal').classList.add('active');
+  document.getElementById('move-task-modal').classList.add('show');
 }
 
 function closeMoveTaskModal() {
-  document.getElementById('move-task-modal').classList.remove('active');
+  document.getElementById('move-task-modal').classList.remove('show');
   movingTaskId = null;
 }
 
