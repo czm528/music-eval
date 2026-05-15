@@ -107,13 +107,20 @@ async function analyzePitch(studentPath, referencePath) {
     const pitchMatchRate = deviations.filter(d => d < 50).length / deviations.length;
     const score = deviationToScore(avgDeviation);
     
+    // 降采样曲线数据（最多200个点，避免数据过大）
+    const maxPoints = 200;
+    const refCurve = downsample(refResampled, maxPoints);
+    const stuCurve = downsample(stuResampled, maxPoints);
+    
     return {
       score,
       avg_deviation_cents: Math.round(avgDeviation * 10) / 10,
       max_deviation_cents: Math.round(maxDeviation * 10) / 10,
       pitch_match_rate: Math.round(pitchMatchRate * 1000) / 10,
       ref_notes_count: refVoiced.length,
-      stu_notes_count: stuVoiced.length
+      stu_notes_count: stuVoiced.length,
+      ref_curve: refCurve.map(v => Math.round(v * 10) / 10),
+      stu_curve: stuCurve.map(v => Math.round(v * 10) / 10)
     };
     
   } catch (error) {
@@ -130,6 +137,16 @@ function extractPitches(audioData, detectPitch, frameSize, hopSize) {
     pitches.push(pitch);
   }
   return pitches;
+}
+
+function downsample(arr, maxLen) {
+  if (arr.length <= maxLen) return arr.slice();
+  const step = arr.length / maxLen;
+  const result = [];
+  for (let i = 0; i < maxLen; i++) {
+    result.push(arr[Math.floor(i * step)]);
+  }
+  return result;
 }
 
 function resample(arr, targetLen) {

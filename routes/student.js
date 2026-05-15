@@ -344,6 +344,7 @@ router.post('/answers/audio', (req, res) => {
       const audioPath = `/uploads/audio/${req.file.filename}`;
       let pitchScore = null;
       let pitchDeviation = null;
+      let pitchCurve = null;
       let content = '🎤 音频回答';
       
       // 如果是音频题且有参考音频，调用Node.js音准分析
@@ -355,11 +356,11 @@ router.post('/answers/audio', (req, res) => {
           if (result) {
             pitchScore = result.score;
             pitchDeviation = result.avg_deviation_cents;
+            pitchCurve = (result.ref_curve && result.stu_curve) ? JSON.stringify({ ref: result.ref_curve, stu: result.stu_curve }) : null;
             content = `🎤 音准得分: ${pitchScore}分 (偏差${pitchDeviation}音分)`;
           }
         } catch (e) {
           console.error('音准分析失败:', e.message);
-          // 分析失败不阻塞提交，只是没有音准分
         }
       }
       
@@ -379,7 +380,7 @@ router.post('/answers/audio', (req, res) => {
       if (existing) {
         db.prepare(`
           UPDATE answers SET content = ?, evaluation = ?, dimensions = ?, total_score = ?, 
-            comment = ?, eval_method = ?, audio_file = ?, pitch_score = ?, pitch_deviation = ?, evaluated_at = CURRENT_TIMESTAMP
+            comment = ?, eval_method = ?, audio_file = ?, pitch_score = ?, pitch_deviation = ?, pitch_curve = ?, evaluated_at = CURRENT_TIMESTAMP
           WHERE question_id = ? AND student_id = ?
         `).run(
           content,
@@ -391,12 +392,13 @@ router.post('/answers/audio', (req, res) => {
           audioPath,
           pitchScore,
           pitchDeviation,
+          pitchCurve,
           questionId, user.id
         );
       } else {
         db.prepare(`
-          INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method, audio_file, pitch_score, pitch_deviation)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method, audio_file, pitch_score, pitch_deviation, pitch_curve)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           questionId, user.id, content,
           JSON.stringify(evaluation),
@@ -406,7 +408,8 @@ router.post('/answers/audio', (req, res) => {
           evaluation.method,
           audioPath,
           pitchScore,
-          pitchDeviation
+          pitchDeviation,
+          pitchCurve
         );
       }
       
@@ -426,12 +429,13 @@ router.post('/answers/audio', (req, res) => {
         success: true,
         message: '回答已提交',
         data: {
-          answerId: result.lastInsertRowid,
+          answerId: existing ? existing.id : result.lastInsertRowid,
           score: evaluation.totalScore,
           dimensions: evaluation.dimensions,
           comment: evaluation.comment,
           pitchScore,
-          pitchDeviation
+          pitchDeviation,
+          pitchCurve: pitchCurve ? JSON.parse(pitchCurve) : null
         }
       });
     } catch (error) {
@@ -648,6 +652,13 @@ router.get('/answers/:questionId', (req, res) => {
     if (answer.evaluation) {
       try {
         answer.evaluation = JSON.parse(answer.evaluation);
+      } catch (e) {}
+    }
+    
+    // 解析音高曲线
+    if (answer.pitch_curve) {
+      try {
+        answer.pitchCurve = JSON.parse(answer.pitch_curve);
       } catch (e) {}
     }
     

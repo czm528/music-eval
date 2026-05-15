@@ -304,9 +304,15 @@ async function submitAnswer() {
 
 // 显示带动画的评价结果
 function showResultWithAnimation(result) {
+  // 兼容两种格式：直接返回的(totalScore) vs 数据库查的(total_score)
+  const totalScore = result.totalScore ?? result.total_score ?? 0;
+  const dims = result.dimensions || {};
+  const comment = result.comment || '评价完成';
+  const pitchCurve = result.pitchCurve || null;
+  
   // 显示分数（带动画）
   const scoreEl = document.getElementById('my-score');
-  animateNumber(scoreEl, result.totalScore);
+  animateNumber(scoreEl, totalScore);
   
   // 显示维度得分
   const dimensionsContainer = document.getElementById('dimensions-display');
@@ -321,7 +327,7 @@ function showResultWithAnimation(result) {
   
   // 显示评语
   const commentEl = document.getElementById('my-comment');
-  commentEl.textContent = result.comment || '评价完成';
+  commentEl.textContent = comment;
   
   // 显示建议
   const tipsSection = document.getElementById('tips-section');
@@ -333,6 +339,9 @@ function showResultWithAnimation(result) {
   } else {
     tipsSection.style.display = 'none';
   }
+  
+  // 显示音高对比图
+  renderPitchChart(pitchCurve);
   
   // 显示结果区域
   document.getElementById('answer-form-section').classList.add('hidden');
@@ -513,7 +522,14 @@ async function submitAudioAnswer() {
     if (data.success) {
       hasAnswered = true;
       showToast('提交成功');
-      showAnswerResult(data.data);
+      // 构造结果对象，包含pitchCurve
+      const resultData = {
+        totalScore: data.data.score,
+        dimensions: data.data.dimensions,
+        comment: data.data.comment,
+        pitchCurve: data.data.pitchCurve
+      };
+      showResultWithAnimation(resultData);
     } else {
       showToast(data.message || '提交失败');
       document.getElementById('submit-audio-btn').textContent = '提交演唱';
@@ -524,6 +540,71 @@ async function submitAudioAnswer() {
     document.getElementById('submit-audio-btn').textContent = '提交演唱';
     document.getElementById('submit-audio-btn').disabled = false;
   }
+}
+
+// 渲染音高对比图
+function renderPitchChart(pitchCurve) {
+  const section = document.getElementById('pitch-chart-section');
+  if (!pitchCurve || !pitchCurve.ref || !pitchCurve.stu) {
+    section.style.display = 'none';
+    return;
+  }
+  
+  section.style.display = 'block';
+  
+  // 延迟渲染，等DOM可见
+  setTimeout(() => {
+    const container = document.getElementById('pitch-chart');
+    if (!container || typeof echarts === 'undefined') return;
+    
+    const chart = echarts.init(container);
+    const xData = pitchCurve.ref.map((_, i) => i);
+    
+    chart.setOption({
+      grid: { top: 20, right: 15, bottom: 25, left: 45 },
+      xAxis: {
+        type: 'category',
+        data: xData,
+        show: false
+      },
+      yAxis: {
+        type: 'value',
+        name: '音分',
+        nameTextStyle: { fontSize: 11 },
+        axisLabel: { fontSize: 10 },
+        splitLine: { lineStyle: { type: 'dashed', opacity: 0.3 } }
+      },
+      series: [
+        {
+          name: '参考旋律',
+          type: 'line',
+          data: pitchCurve.ref,
+          smooth: true,
+          symbol: 'none',
+          lineStyle: { color: '#5470c6', width: 2.5 },
+          areaStyle: { color: 'rgba(84,112,198,0.08)' }
+        },
+        {
+          name: '你的演唱',
+          type: 'line',
+          data: pitchCurve.stu,
+          smooth: true,
+          symbol: 'none',
+          lineStyle: { color: '#ee6666', width: 2 },
+          areaStyle: { color: 'rgba(238,102,102,0.08)' }
+        }
+      ],
+      tooltip: {
+        trigger: 'axis',
+        formatter: function(params) {
+          return params.map(p => `${p.seriesName}: ${p.value}音分`).join('<br>');
+        }
+      }
+    });
+    
+    // 自适应宽度
+    window.addEventListener('resize', () => chart.resize());
+  }, 100);
 }
 
 // 重新回答

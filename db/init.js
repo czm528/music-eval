@@ -256,6 +256,7 @@ function migrateDatabase() {
     { table: 'answers', column: 'audio_file', checkCols: answersColumns, type: 'TEXT DEFAULT NULL' },
     { table: 'answers', column: 'pitch_score', checkCols: answersColumns, type: 'REAL DEFAULT NULL' },
     { table: 'answers', column: 'pitch_deviation', checkCols: answersColumns, type: 'REAL DEFAULT NULL' },
+    { table: 'answers', column: 'pitch_curve', checkCols: answersColumns, type: 'TEXT DEFAULT NULL' },
   ];
   
   for (const m of migrations) {
