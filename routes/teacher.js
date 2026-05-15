@@ -288,6 +288,36 @@ router.post('/questions/:id/end', (req, res) => {
   }
 });
 
+// 删除问题（及其所有回答）
+router.delete('/questions/:id', (req, res) => {
+  const { id } = req.params;
+  const user = req.sessionUser || req.session.user;
+  const db = getDatabase();
+  
+  try {
+    // 验证问题归属当前教师
+    const question = db.prepare(`
+      SELECT q.* FROM questions q
+      JOIN classrooms c ON q.classroom_id = c.id
+      WHERE q.id = ? AND c.teacher_id = ?
+    `).get(id, user.id);
+    
+    if (!question) {
+      return res.json({ success: false, message: '问题不存在或无权限' });
+    }
+    
+    // 删除该问题的所有回答
+    db.prepare('DELETE FROM answers WHERE question_id = ?').run(id);
+    // 删除问题
+    db.prepare('DELETE FROM questions WHERE id = ?').run(id);
+    
+    res.json({ success: true, message: '问题已删除' });
+  } catch (error) {
+    console.error('删除问题错误:', error);
+    res.json({ success: false, message: '删除失败' });
+  }
+});
+
 // ============ 评价查看 ============
 
 // 获取问题的回答列表

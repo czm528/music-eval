@@ -104,7 +104,6 @@ function renderClassroomList() {
 async function selectClassroom(id) {
   // 防止重复点击
   if (isLoadingClassroom) return;
-  if (currentClassroom && currentClassroom.id === id) return;
   isLoadingClassroom = true;
   
   try {
@@ -197,8 +196,24 @@ function renderQuestions() {
     currentText.textContent = currentQ.content;
     currentAnswers.textContent = currentQ.answer_count || 0;
     currentAvg.textContent = currentQ.normalized_avg_score ? currentQ.normalized_avg_score.toFixed(1) : '0';
+    // 给当前问题加删除按钮
+    let delBtn = document.getElementById('delete-current-question-btn');
+    if (!delBtn) {
+      delBtn = document.createElement('button');
+      delBtn.id = 'delete-current-question-btn';
+      delBtn.className = 'btn btn-sm btn-danger';
+      delBtn.style.cssText = 'margin-left:12px;font-size:12px;padding:4px 10px;';
+      delBtn.textContent = '删除';
+      delBtn.onclick = () => deleteQuestion(currentQ.id, currentQ.content);
+      currentAvg.parentNode.appendChild(delBtn);
+    } else {
+      delBtn.onclick = () => deleteQuestion(currentQ.id, currentQ.content);
+      delBtn.style.display = '';
+    }
   } else {
     currentSection.style.display = 'none';
+    const delBtn = document.getElementById('delete-current-question-btn');
+    if (delBtn) delBtn.style.display = 'none';
   }
   
   // 历史问题
@@ -230,9 +245,33 @@ function renderQuestions() {
         <span>${q.answer_count || 0} 人回答</span>
         <span class="separator">|</span>
         <span>平均 ${q.normalized_avg_score ? q.normalized_avg_score.toFixed(1) : 0} 分</span>
+        <button class="btn btn-sm btn-danger" style="float:right;font-size:12px;padding:2px 8px;" onclick="deleteQuestion(${q.id}, '${q.content.replace(/'/g, "\\'")}')">删除</button>
       </div>
     </div>
   `}).join('');
+}
+
+// 删除问题
+async function deleteQuestion(questionId, questionContent) {
+  if (!confirm(`确定删除问题「${questionContent}」吗？\n删除后该问题的所有回答也会被清除。`)) return;
+  
+  try {
+    const token = getToken();
+    const res = await fetch(`/api/teacher/questions/${questionId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      showToast('问题已删除');
+      selectClassroom(currentClassroom.id);
+    } else {
+      showToast(data.message || '删除失败');
+    }
+  } catch (error) {
+    showToast('删除失败');
+  }
 }
 
 // 发布问题
