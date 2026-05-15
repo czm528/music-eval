@@ -29,6 +29,11 @@ async function apiRequest(url, options = {}) {
   }
 }
 
+// 获取认证token
+function getToken() {
+  return localStorage.getItem('token') || '';
+}
+
 // 获取用户信息
 function getUser() {
   try {
