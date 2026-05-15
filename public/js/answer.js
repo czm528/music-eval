@@ -316,7 +316,6 @@ function showResultWithAnimation(result) {
   
   // 显示维度得分
   const dimensionsContainer = document.getElementById('dimensions-display');
-  const dims = result.dimensions || {};
   
   dimensionsContainer.innerHTML = Object.entries(dims).map(([key, score]) => `
     <div class="dim-item">
