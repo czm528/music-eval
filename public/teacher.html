@@ -352,6 +352,29 @@
     </div>
   </div>
   
+  <!-- 移动到模块弹窗 -->
+  <div id="move-task-modal" class="modal">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3>移动到模块</h3>
+        <button class="modal-close" onclick="closeMoveTaskModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="move-task-name" style="font-weight:bold;margin-bottom:12px;"></p>
+        <div class="form-group">
+          <label for="move-module-select">选择目标模块</label>
+          <select id="move-module-select">
+            <option value="">未归类</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeMoveTaskModal()">取消</button>
+        <button class="btn btn-primary" onclick="confirmMoveTask()">移动</button>
+      </div>
+    </div>
+  </div>
+  
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/common.js"></script>
   <script src="/js/socket.js"></script>

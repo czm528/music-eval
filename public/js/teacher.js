@@ -133,6 +133,7 @@ function renderClassroomList() {
             <div class="task-meta">
               <span>👥 ${task.student_count || 0}</span>
               <span class="status ${task.status}">${task.status === 'active' ? '进行中' : '已结束'}</span>
+              <button class="btn-icon" onclick="event.stopPropagation();showMoveTask(${task.id},'${escapeHtml(task.name)}')" title="移动到模块">📦</button>
             </div>
           </div>
         `;
@@ -165,6 +166,7 @@ function renderClassroomList() {
           <div class="task-meta">
             <span>👥 ${task.student_count || 0}</span>
             <span class="status ${task.status}">${task.status === 'active' ? '进行中' : '已结束'}</span>
+            <button class="btn-icon" onclick="event.stopPropagation();showMoveTask(${task.id},'${escapeHtml(task.name)}')" title="移动到模块">📦</button>
           </div>
         </div>
       `;
@@ -314,6 +316,53 @@ async function deleteModule(moduleId) {
   } catch (error) {
     console.error('删除模块错误:', error);
     showToast('网络错误');
+  }
+}
+
+// ============ 移动任务到模块 ============
+let movingTaskId = null;
+
+function showMoveTask(taskId, taskName) {
+  movingTaskId = taskId;
+  document.getElementById('move-task-name').textContent = taskName;
+  
+  // 填充模块选项
+  const select = document.getElementById('move-module-select');
+  const modules = classroomList.modules || [];
+  select.innerHTML = '<option value="">未归类</option>';
+  modules.forEach(m => {
+    select.innerHTML += `<option value="${m.id}">${escapeHtml(m.name)}</option>`;
+  });
+  
+  document.getElementById('move-task-modal').classList.add('active');
+}
+
+function closeMoveTaskModal() {
+  document.getElementById('move-task-modal').classList.remove('active');
+  movingTaskId = null;
+}
+
+async function confirmMoveTask() {
+  if (!movingTaskId) return;
+  
+  const moduleId = document.getElementById('move-module-select').value;
+  
+  try {
+    const res = await apiRequest(`/api/teacher/classrooms/${movingTaskId}/module`, {
+      method: 'PATCH',
+      body: { moduleId: moduleId || null }
+    });
+    
+    if (res.success) {
+      showToast('移动成功');
+      closeMoveTaskModal();
+      await loadClassrooms();
+    } else {
+      showToast(res.message || '移动失败');
+    }
+  } catch (error) {
+    console.error('移动任务错误:', error);
+    showToast('移动失败');
   }
 }
 
