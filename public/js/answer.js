@@ -619,8 +619,19 @@ function retryAnswer() {
   // 清空之前的输入
   document.getElementById('answer-input').value = '';
   
-  // 如果是音频题，重置录音状态
-  removeAudio();
+  // 根据题目类型切换UI
+  if (currentQuestion) {
+    checkQuestionType(currentQuestion);
+  }
+  
+  // 重置录音状态
+  recordedBlob = null;
+  const preview = document.getElementById('audio-answer-preview');
+  if (preview) preview.style.display = 'none';
+  const submitBtn = document.getElementById('submit-audio-btn');
+  if (submitBtn) { submitBtn.style.display = 'none'; submitBtn.textContent = '提交演唱'; submitBtn.disabled = false; }
+  const recorderStatus = document.getElementById('recorder-status');
+  if (recorderStatus) recorderStatus.textContent = '点击开始录音';
   
   showToast('可以重新回答了');
 }
