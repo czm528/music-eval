@@ -1,8 +1,9 @@
-FROM node:18-alpine
+FROM node:18-slim
 
-# 添加community仓库 + 安装编译工具和ffmpeg
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
-    apk add --no-cache python3 make g++ ffmpeg
+# 安装编译工具 + ffmpeg
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 make g++ ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY package*.json ./
