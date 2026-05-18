@@ -1,12 +1,14 @@
 /**
  * 管理员路由
- * 处理管理员相关的操作：用户管理、班级管理、系统配置、数据统计
+ * 处理管理员相关的操作：用户管理、班级管理、系统配置、数据统计、答案导入
  */
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 const { getDatabase } = require('../db/init');
+const keywordEval = require('../services/keyword-eval');
+const { updateCompetencyRecord, getClassroomStats } = require('../services/student-helper');
 
 // 中间件：检查管理员权限（支持session和token两种认证方式）
 function requireAdmin(req, res, next) {
@@ -386,6 +388,465 @@ router.get('/stats', (req, res) => {
     console.error('获取统计错误:', error);
     res.json({ success: false, message: '获取失败' });
   }
+});
+
+// ============ 课堂管理 ============
+
+// 获取所有课堂（含模块信息）
+router.get('/classrooms', (req, res) => {
+  const db = getDatabase();
+  
+  try {
+    const classrooms = db.prepare(`
+      SELECT c.*, t.nickname as teacher_name, m.name as module_name,
+             (SELECT COUNT(*) FROM questions WHERE classroom_id = c.id) as question_count,
+             (SELECT COUNT(*) FROM classroom_students WHERE classroom_id = c.id) as student_count
+      FROM classrooms c
+      LEFT JOIN teachers t ON c.teacher_id = t.id
+      LEFT JOIN modules m ON c.module_id = m.id
+      ORDER BY c.created_at DESC
+    `).all();
+    
+    res.json({ success: true, data: classrooms });
+  } catch (error) {
+    console.error('获取课堂列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 获取指定课堂的所有问题
+router.get('/classrooms/:id/questions', (req, res) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  
+  try {
+    const questions = db.prepare(`
+      SELECT q.*, 
+             (SELECT COUNT(*) FROM answers WHERE question_id = q.id) as answer_count,
+             c.name as classroom_name
+      FROM questions q
+      LEFT JOIN classrooms c ON q.classroom_id = c.id
+      WHERE q.classroom_id = ?
+      ORDER BY q.created_at DESC
+    `).all(id);
+    
+    // 解析维度数据
+    questions.forEach(q => {
+      if (q.dimensions) {
+        try {
+          q.dimensions = JSON.parse(q.dimensions);
+        } catch (e) {}
+      }
+    });
+    
+    res.json({ success: true, data: questions });
+  } catch (error) {
+    console.error('获取问题列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// ============ 问题答案管理 ============
+
+// 获取指定问题的所有学生回答
+router.get('/questions/:id/answers', (req, res) => {
+  const { id } = req.params;
+  const { sortBy = 'created_at', order = 'DESC' } = req.query;
+  const db = getDatabase();
+  
+  try {
+    // 验证排序字段，防止SQL注入
+    const allowedSortFields = ['created_at', 'total_score', 'student_name', 'student_number'];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'created_at';
+    const sortOrder = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    
+    const answers = db.prepare(`
+      SELECT a.*, s.name as student_name, s.student_number
+      FROM answers a
+      JOIN students s ON a.student_id = s.id
+      WHERE a.question_id = ?
+      ORDER BY ${sortField} ${sortOrder}
+    `).all(id);
+    
+    // 解析数据
+    answers.forEach(a => {
+      if (a.evaluation) {
+        try {
+          a.evaluation = JSON.parse(a.evaluation);
+        } catch (e) {}
+      }
+      if (a.dimensions) {
+        try {
+          a.dimensions = JSON.parse(a.dimensions);
+        } catch (e) {}
+      }
+    });
+    
+    // 获取问题信息
+    const question = db.prepare(`
+      SELECT q.*, c.name as classroom_name
+      FROM questions q
+      LEFT JOIN classrooms c ON q.classroom_id = c.id
+      WHERE q.id = ?
+    `).get(id);
+    
+    if (question && question.dimensions) {
+      try {
+        question.dimensions = JSON.parse(question.dimensions);
+      } catch (e) {}
+    }
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        answers,
+        question
+      }
+    });
+  } catch (error) {
+    console.error('获取回答列表错误:', error);
+    res.json({ success: false, message: '获取失败' });
+  }
+});
+
+// 批量导入答案
+router.post('/questions/:id/answers/import', async (req, res) => {
+  const { id } = req.params;
+  const { answers } = req.body;
+  const db = getDatabase();
+  
+  if (!answers || !Array.isArray(answers) || answers.length === 0) {
+    return res.json({ success: false, message: '请提供要导入的答案数据' });
+  }
+  
+  try {
+    // 获取问题信息
+    const question = db.prepare(`
+      SELECT q.*, c.id as cr_id
+      FROM questions q
+      LEFT JOIN classrooms c ON q.classroom_id = c.id
+      WHERE q.id = ?
+    `).get(id);
+    
+    if (!question) {
+      return res.json({ success: false, message: '问题不存在' });
+    }
+    
+    // 获取问题的维度设置
+    let selectedDimensions = ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+    if (question.dimensions) {
+      try {
+        selectedDimensions = JSON.parse(question.dimensions);
+      } catch (e) {}
+    }
+    
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: []
+    };
+    
+    for (let i = 0; i < answers.length; i++) {
+      const item = answers[i];
+      
+      if (!item.studentNumber || !item.content) {
+        results.failed++;
+        results.errors.push(`第${i + 1}行：学号和回答内容不能为空`);
+        continue;
+      }
+      
+      try {
+        // 查找或创建学生
+        let student = db.prepare('SELECT * FROM students WHERE student_number = ?').get(item.studentNumber);
+        
+        if (!student) {
+          // 创建新学生
+          const insertResult = db.prepare('INSERT INTO students (student_number, name) VALUES (?, ?)').run(
+            item.studentNumber,
+            item.studentName || `学生${item.studentNumber}`
+          );
+          student = { id: insertResult.lastInsertRowid };
+        } else if (item.studentName && student.name !== item.studentName) {
+          // 更新学生姓名（如果提供了且不同）
+          db.prepare('UPDATE students SET name = ? WHERE id = ?').run(item.studentName, student.id);
+          student.name = item.studentName;
+        }
+        
+        // 评价答案
+        let evaluation;
+        
+        if (question.question_type === 'audio') {
+          // 音标题：使用手动评分或默认值
+          const score = item.score !== undefined ? item.score : 0;
+          evaluation = {
+            dimensions: { pitch: score },
+            totalScore: score,
+            comment: score > 0 ? `手动评分：${score}分` : '待教师评价',
+            method: item.score !== undefined ? 'manual' : 'pending'
+          };
+        } else {
+          // 文字题：使用关键词评价
+          evaluation = keywordEval.evaluate(question.content, item.content, selectedDimensions);
+        }
+        
+        // 检查是否已存在回答
+        const existingAnswer = db.prepare('SELECT * FROM answers WHERE question_id = ? AND student_id = ?').get(
+          id, student.id
+        );
+        
+        let answerId;
+        
+        if (existingAnswer) {
+          // 更新已有回答
+          db.prepare(`
+            UPDATE answers SET content = ?, evaluation = ?, dimensions = ?, total_score = ?, 
+              comment = ?, eval_method = ?, evaluated_at = CURRENT_TIMESTAMP
+            WHERE question_id = ? AND student_id = ?
+          `).run(
+            item.content,
+            JSON.stringify(evaluation),
+            JSON.stringify(evaluation.dimensions),
+            evaluation.totalScore,
+            evaluation.comment,
+            evaluation.method,
+            id, student.id
+          );
+          answerId = existingAnswer.id;
+        } else {
+          // 插入新回答
+          const insertResult = db.prepare(`
+            INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            id,
+            student.id,
+            item.content,
+            JSON.stringify(evaluation),
+            JSON.stringify(evaluation.dimensions),
+            evaluation.totalScore,
+            evaluation.comment,
+            evaluation.method
+          );
+          answerId = insertResult.lastInsertRowid;
+        }
+        
+        // 更新学生素养记录
+        updateCompetencyRecord(db, student.id, evaluation.dimensions, selectedDimensions);
+        
+        results.success++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push(`第${i + 1}行（学号${item.studentNumber}）：${err.message}`);
+      }
+    }
+    
+    // 通过Socket.io广播更新
+    const io = req.app.get('io');
+    if (io && results.success > 0) {
+      io.to(`classroom:${question.cr_id}`).emit('answer-imported', {
+        questionId: id,
+        importedCount: results.success
+      });
+      
+      // 广播课堂统计更新
+      const stats = getClassroomStats(db, question.cr_id);
+      io.to(`classroom:${question.cr_id}`).emit('classroom-stats', stats);
+    }
+    
+    res.json({
+      success: true,
+      message: `导入完成：成功${results.success}条，失败${results.failed}条`,
+      data: results
+    });
+  } catch (error) {
+    console.error('批量导入答案错误:', error);
+    res.json({ success: false, message: '导入失败：' + error.message });
+  }
+});
+
+// 单条录入答案
+router.post('/questions/:id/answers/single', async (req, res) => {
+  const { id } = req.params;
+  const { studentName, studentNumber, content, score } = req.body;
+  const db = getDatabase();
+  
+  if (!studentNumber || !content) {
+    return res.json({ success: false, message: '学号和回答内容不能为空' });
+  }
+  
+  try {
+    // 获取问题信息
+    const question = db.prepare(`
+      SELECT q.*, c.id as cr_id
+      FROM questions q
+      LEFT JOIN classrooms c ON q.classroom_id = c.id
+      WHERE q.id = ?
+    `).get(id);
+    
+    if (!question) {
+      return res.json({ success: false, message: '问题不存在' });
+    }
+    
+    // 获取问题的维度设置
+    let selectedDimensions = ['perception', 'emotion', 'culture', 'aesthetic', 'expression'];
+    if (question.dimensions) {
+      try {
+        selectedDimensions = JSON.parse(question.dimensions);
+      } catch (e) {}
+    }
+    
+    // 查找或创建学生
+    let student = db.prepare('SELECT * FROM students WHERE student_number = ?').get(studentNumber);
+    
+    if (!student) {
+      const insertResult = db.prepare('INSERT INTO students (student_number, name) VALUES (?, ?)').run(
+        studentNumber,
+        studentName || `学生${studentNumber}`
+      );
+      student = { id: insertResult.lastInsertRowid, name: studentName || `学生${studentNumber}` };
+    } else if (studentName && student.name !== studentName) {
+      db.prepare('UPDATE students SET name = ? WHERE id = ?').run(studentName, student.id);
+      student.name = studentName;
+    }
+    
+    // 评价答案
+    let evaluation;
+    
+    if (question.question_type === 'audio') {
+      const pitchScore = score !== undefined ? score : 0;
+      evaluation = {
+        dimensions: { pitch: pitchScore },
+        totalScore: pitchScore,
+        comment: pitchScore > 0 ? `手动评分：${pitchScore}分` : '待教师评价',
+        method: score !== undefined ? 'manual' : 'pending'
+      };
+    } else {
+      evaluation = keywordEval.evaluate(question.content, content, selectedDimensions);
+    }
+    
+    // 检查是否已存在回答
+    const existingAnswer = db.prepare('SELECT * FROM answers WHERE question_id = ? AND student_id = ?').get(
+      id, student.id
+    );
+    
+    let answerId;
+    
+    if (existingAnswer) {
+      db.prepare(`
+        UPDATE answers SET content = ?, evaluation = ?, dimensions = ?, total_score = ?, 
+          comment = ?, eval_method = ?, evaluated_at = CURRENT_TIMESTAMP
+        WHERE question_id = ? AND student_id = ?
+      `).run(
+        content,
+        JSON.stringify(evaluation),
+        JSON.stringify(evaluation.dimensions),
+        evaluation.totalScore,
+        evaluation.comment,
+        evaluation.method,
+        id, student.id
+      );
+      answerId = existingAnswer.id;
+    } else {
+      const insertResult = db.prepare(`
+        INSERT INTO answers (question_id, student_id, content, evaluation, dimensions, total_score, comment, eval_method)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        student.id,
+        content,
+        JSON.stringify(evaluation),
+        JSON.stringify(evaluation.dimensions),
+        evaluation.totalScore,
+        evaluation.comment,
+        evaluation.method
+      );
+      answerId = insertResult.lastInsertRowid;
+    }
+    
+    // 更新学生素养记录
+    updateCompetencyRecord(db, student.id, evaluation.dimensions, selectedDimensions);
+    
+    // Socket广播
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`classroom:${question.cr_id}`).emit('answer-added', {
+        questionId: id,
+        studentId: student.id,
+        studentName: student.name,
+        totalScore: evaluation.totalScore
+      });
+      
+      const stats = getClassroomStats(db, question.cr_id);
+      io.to(`classroom:${question.cr_id}`).emit('classroom-stats', stats);
+    }
+    
+    res.json({
+      success: true,
+      message: '录入成功',
+      data: {
+        answerId,
+        studentId: student.id,
+        studentName: student.name,
+        totalScore: evaluation.totalScore,
+        comment: evaluation.comment
+      }
+    });
+  } catch (error) {
+    console.error('录入答案错误:', error);
+    res.json({ success: false, message: '录入失败：' + error.message });
+  }
+});
+
+// 删除回答
+router.delete('/answers/:id', (req, res) => {
+  const { id } = req.params;
+  const db = getDatabase();
+  
+  try {
+    // 获取回答信息（用于广播）
+    const answer = db.prepare(`
+      SELECT a.*, q.classroom_id
+      FROM answers a
+      JOIN questions q ON a.question_id = q.id
+      WHERE a.id = ?
+    `).get(id);
+    
+    if (!answer) {
+      return res.json({ success: false, message: '回答不存在' });
+    }
+    
+    // 删除回答
+    db.prepare('DELETE FROM answers WHERE id = ?').run(id);
+    
+    // 通过Socket广播
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`classroom:${answer.classroom_id}`).emit('answer-deleted', {
+        answerId: id,
+        questionId: answer.question_id
+      });
+      
+      const stats = getClassroomStats(db, answer.classroom_id);
+      io.to(`classroom:${answer.classroom_id}`).emit('classroom-stats', stats);
+    }
+    
+    res.json({ success: true, message: '删除成功' });
+  } catch (error) {
+    console.error('删除回答错误:', error);
+    res.json({ success: false, message: '删除失败' });
+  }
+});
+
+// 下载导入模板
+router.get('/template/download', (req, res) => {
+  // 返回CSV格式的模板
+  const template = `序号,学生姓名,学号,回答内容,评分(可选)
+1,张三,2024001,请在此输入回答内容,
+2,李四,2024002,请在此输入回答内容,`;
+  
+  res.setHeader('Content-Type', 'text/csv;charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename=answer_import_template.csv');
+  res.send('\ufeff' + template); // \ufeff 是BOM，用于Excel正确识别UTF-8
 });
 
 module.exports = router;

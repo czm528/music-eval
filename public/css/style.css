@@ -2685,3 +2685,245 @@ textarea {
     gap: 2px;
   }
 }
+
+/* ============ 答案管理样式 ============ */
+
+/* 答案管理器布局 */
+.answer-manager {
+  display: grid;
+  grid-template-columns: 280px 1fr 320px;
+  gap: var(--space-lg);
+  height: calc(100vh - 120px);
+}
+
+.answer-selector {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.answer-selector h3 {
+  margin-bottom: var(--space);
+  font-size: 15px;
+  color: var(--text-primary);
+}
+
+.question-info {
+  margin-top: var(--space);
+  padding: var(--space);
+  background: var(--bg-light);
+  border-radius: var(--radius);
+}
+
+.question-info h4 {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.question-info p {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.answer-list-panel {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space);
+}
+
+.panel-header h3 {
+  font-size: 15px;
+}
+
+.panel-actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.panel-actions .form-select {
+  width: auto;
+  min-width: 120px;
+}
+
+.answer-table-container {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.answer-import-panel {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  overflow-y: auto;
+}
+
+.answer-import-panel h3 {
+  font-size: 15px;
+  margin-bottom: var(--space);
+}
+
+.import-card {
+  background: var(--bg-light);
+  border-radius: var(--radius);
+  padding: var(--space);
+  margin-bottom: var(--space);
+}
+
+.import-card h4 {
+  font-size: 13px;
+  margin-bottom: var(--space-sm);
+  color: var(--text-secondary);
+}
+
+.import-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-sm);
+}
+
+.import-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.import-preview {
+  margin-top: var(--space);
+  padding: var(--space);
+  background: var(--bg-white);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.import-preview ul {
+  margin: var(--space-xs) 0;
+  padding-left: 20px;
+}
+
+.import-preview li {
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+}
+
+.import-status {
+  margin-top: var(--space);
+  font-size: 12px;
+}
+
+.import-status .loading {
+  color: var(--info-color);
+}
+
+.import-status .success {
+  color: var(--success-color);
+}
+
+.import-status .error {
+  color: var(--danger-color);
+}
+
+/* 答案详情弹窗 */
+.modal-lg {
+  max-width: 600px;
+}
+
+.detail-row {
+  display: flex;
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.detail-row label {
+  width: 100px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.detail-row span {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.detail-section {
+  margin-top: var(--space);
+}
+
+.detail-section label {
+  display: block;
+  color: var(--text-secondary);
+  font-weight: 500;
+  margin-bottom: var(--space-xs);
+}
+
+.detail-content,
+.detail-comment {
+  padding: var(--space-sm);
+  background: var(--bg-light);
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dimension-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.dim-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--primary-bg);
+  color: var(--primary-dark);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+}
+
+/* 答案表格 */
+#answers-table td {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#answers-table td[title] {
+  cursor: help;
+}
+
+/* 响应式调整 */
+@media (max-width: 1400px) {
+  .answer-manager {
+    grid-template-columns: 250px 1fr 280px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .answer-manager {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr auto;
+    height: auto;
+  }
+  
+  .answer-selector,
+  .answer-list-panel,
+  .answer-import-panel {
+    max-height: none;
+  }
+}
