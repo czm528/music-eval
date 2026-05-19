@@ -9,6 +9,9 @@ const QRCode = require('qrcode');
 const router = express.Router();
 const { getDatabase } = require('../db/init');
 const config = require('../config');
+const path = require('path');
+const { analyzePitch } = require('../services/pitchAnalyzer');
+const { extractMelodyContour } = require('../services/melody-eval');
 
 // 中间件：检查教师权限（支持session和token两种认证方式）
 function requireTeacher(req, res, next) {
@@ -451,17 +454,18 @@ router.delete('/classrooms/:id', (req, res) => {
 
 // ============ 问题管理 ============
 
-// 发布新问题（支持音频题）
+// 发布新问题（支持文字题、音频题、旋律线题、配色题）
 router.post('/questions', (req, res) => {
   const audioUpload = req.app.get('audioUpload');
+  const dataDir = req.app.get('dataDir') || path.join(__dirname, '..');
   
-  audioUpload.single('reference_audio')(req, res, (err) => {
+  audioUpload.single('reference_audio')(req, res, async (err) => {
     if (err) {
       console.error('音频上传错误:', err.message);
       return res.json({ success: false, message: '文件上传失败: ' + err.message });
     }
     
-    const { classroomId, content, dimensions, questionType } = req.body;
+    const { classroomId, content, dimensions, questionType, lyricsSegments, refConfig } = req.body;
     const user = req.sessionUser || req.session.user;
     
     if (!user) {
@@ -489,19 +493,68 @@ router.post('/questions', (req, res) => {
       const type = questionType || 'text';
       const refAudio = req.file ? `/uploads/audio/${req.file.filename}` : null;
       
-      const result = db.prepare(
-        'INSERT INTO questions (classroom_id, content, dimensions, question_type, reference_audio) VALUES (?, ?, ?, ?, ?)'
-      ).run(classroomId, content, JSON.stringify(dimensions), type, refAudio);
+      // 旋律线题需要从音频提取参考旋律轮廓
+      let refCurve = null;
+      if (type === 'melody' && refAudio) {
+        try {
+          const refPath = path.join(dataDir, 'uploads', 'audio', req.file.filename);
+          const pitchResult = await analyzePitch(refPath, refPath);
+          if (pitchResult && pitchResult.stu_curve) {
+            // 使用提取的音高曲线作为参考
+            const curveData = pitchResult.stu_curve;
+            // 转换为归一化的点
+            const minVal = Math.min(...curveData);
+            const maxVal = Math.max(...curveData);
+            const range = maxVal - minVal || 1;
+            refCurve = curveData.map((v, i) => ({
+              x: i / (curveData.length - 1),
+              y: (v - minVal) / range
+            }));
+          }
+        } catch (e) {
+          console.error('提取旋律轮廓失败:', e.message);
+          // 提取失败不影响发布
+        }
+      }
+      
+      // 构建额外字段
+      const extraFields = {};
+      if (type === 'melody') {
+        // 旋律线题：保存歌词分段和参考轮廓
+        extraFields.lyrics_segments = lyricsSegments || null;
+        extraFields.ref_curve = refCurve ? JSON.stringify(refCurve) : null;
+      } else if (type === 'color') {
+        // 配色题：保存歌词分段和参考颜色配置
+        extraFields.lyrics_segments = lyricsSegments || null;
+        extraFields.ref_config = refConfig || null;
+      }
+      
+      // 插入问题
+      const insertResult = db.prepare(
+        `INSERT INTO questions (classroom_id, content, dimensions, question_type, reference_audio, lyrics_segments, ref_config, ref_curve) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        classroomId, 
+        content, 
+        JSON.stringify(dimensions), 
+        type, 
+        refAudio,
+        extraFields.lyrics_segments,
+        extraFields.ref_config,
+        extraFields.ref_curve
+      );
       
       // 通过Socket.io广播新问题
       const io = req.app.get('io');
       if (io) {
         io.to(`classroom:${classroomId}`).emit('new-question', {
-          questionId: result.lastInsertRowid,
+          questionId: insertResult.lastInsertRowid,
           content,
           dimensions,
           questionType: type,
           referenceAudio: refAudio,
+          lyricsSegments: extraFields.lyrics_segments,
+          refConfig: extraFields.ref_config ? JSON.parse(extraFields.ref_config) : null,
           createdAt: new Date().toISOString()
         });
       }
@@ -509,7 +562,13 @@ router.post('/questions', (req, res) => {
       res.json({
         success: true,
         message: '问题已发布',
-        data: { id: result.lastInsertRowid, questionType: type, referenceAudio: refAudio }
+        data: { 
+          id: insertResult.lastInsertRowid, 
+          questionType: type, 
+          referenceAudio: refAudio,
+          lyricsSegments: extraFields.lyrics_segments,
+          hasRefCurve: !!refCurve
+        }
       });
     } catch (error) {
       console.error('发布问题错误:', error);

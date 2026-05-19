@@ -614,6 +614,21 @@ async function publishQuestion() {
     return;
   }
   
+  // 旋律线题也需要音频
+  if (selectedQuestionType === 'melody' && !selectedAudioFile) {
+    showToast('旋律线题需要上传参考旋律音频');
+    return;
+  }
+  
+  // 配色题需要歌词分段
+  if (selectedQuestionType === 'color') {
+    const colorSegments = document.getElementById('color-segments-input').value.trim();
+    if (!colorSegments) {
+      showToast('配色题需要输入歌词分段');
+      return;
+    }
+  }
+  
   const publishBtn = document.querySelector('.question-panel .btn-primary');
   publishBtn.disabled = true;
   publishBtn.textContent = '转码中...';
@@ -627,6 +642,24 @@ async function publishQuestion() {
     
     if (selectedAudioFile) {
       formData.append('reference_audio', selectedAudioFile);
+    }
+    
+    // 添加旋律线题配置
+    if (selectedQuestionType === 'melody') {
+      const lyricsSegments = document.getElementById('lyrics-segments-input').value.trim();
+      if (lyricsSegments) {
+        formData.append('lyricsSegments', lyricsSegments);
+      }
+    }
+    
+    // 添加配色题配置
+    if (selectedQuestionType === 'color') {
+      const lyricsSegments = document.getElementById('color-segments-input').value.trim();
+      const refConfig = getColorConfig();
+      formData.append('lyricsSegments', lyricsSegments);
+      if (refConfig) {
+        formData.append('refConfig', refConfig);
+      }
     }
     
     const token = getToken();
@@ -648,6 +681,10 @@ async function publishQuestion() {
       showToast('问题已发布');
       document.getElementById('question-content').value = '';
       removeAudio();
+      // 清空旋律线配置
+      document.getElementById('lyrics-segments-input').value = '';
+      // 清空配色配置
+      document.getElementById('color-segments-input').value = '';
       // 重置复选框为全选
       document.querySelectorAll('input[name="dimensions"]').forEach(cb => cb.checked = true);
       // 重置题目类型
@@ -673,15 +710,100 @@ async function publishQuestion() {
 function switchQuestionType(type) {
   selectedQuestionType = type;
   const audioGroup = document.getElementById('audio-upload-group');
+  const melodyGroup = document.getElementById('melody-config-group');
+  const colorGroup = document.getElementById('color-config-group');
   const textArea = document.getElementById('question-content');
+  
+  // 隐藏所有特殊配置区域
+  audioGroup.style.display = 'none';
+  melodyGroup.style.display = 'none';
+  colorGroup.style.display = 'none';
   
   if (type === 'audio') {
     audioGroup.style.display = '';
     textArea.placeholder = '请描述演唱要求（如：请演唱《欢乐颂》主题旋律）';
+  } else if (type === 'melody') {
+    // 旋律线题也需要上传音频
+    audioGroup.style.display = '';
+    melodyGroup.style.display = '';
+    textArea.placeholder = '请描述绘画要求（如：请画出这段音乐的旋律走向）';
+  } else if (type === 'color') {
+    colorGroup.style.display = '';
+    textArea.placeholder = '请描述配色要求（如：请为每句歌词选择合适的情绪颜色）';
+    // 初始化配色配置区域
+    initColorConfig();
   } else {
-    audioGroup.style.display = 'none';
     textArea.placeholder = '请输入音乐鉴赏问题，例如：\n请描述这段音乐的速度、力度和情感特点';
   }
+}
+
+// 初始化配色题配置区域
+function initColorConfig() {
+  const segmentsInput = document.getElementById('color-segments-input');
+  const configContainer = document.getElementById('color-ref-config');
+  
+  // 监听歌词分段输入变化
+  segmentsInput.oninput = function() {
+    updateColorConfigUI();
+  };
+  
+  // 初始渲染
+  updateColorConfigUI();
+}
+
+// 更新配色配置UI
+function updateColorConfigUI() {
+  const segmentsText = document.getElementById('color-segments-input').value;
+  const configContainer = document.getElementById('color-ref-config');
+  
+  if (!segmentsText.trim()) {
+    configContainer.innerHTML = '<p style="font-size:12px;color:#888;">请先输入歌词分段</p>';
+    return;
+  }
+  
+  const segments = segmentsText.split('|').map(s => s.trim()).filter(s => s);
+  const header = '<p style="font-size:12px;color:#888;margin-bottom:8px;">为每段歌词选择参考情绪颜色：</p>';
+  
+  let html = header;
+  segments.forEach((seg, i) => {
+    html += `
+      <div style="margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+        <span style="min-width: 80px; font-size: 13px;">${escapeHtml(seg)}</span>
+        <select id="color-ref-${i}" style="flex: 1; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 4px;">
+          <option value="">不设置参考</option>
+          <option value="red">🔴 激昂</option>
+          <option value="orange">🟠 温暖</option>
+          <option value="yellow">🟡 欢快</option>
+          <option value="green">🟢 宁静</option>
+          <option value="blue">🔵 忧伤</option>
+          <option value="purple">🟣 神秘</option>
+          <option value="white">⚪ 空灵</option>
+          <option value="brown">🟤 沉稳</option>
+        </select>
+      </div>
+    `;
+  });
+  
+  configContainer.innerHTML = html;
+}
+
+// 获取配色题配置
+function getColorConfig() {
+  const segmentsText = document.getElementById('color-segments-input').value;
+  if (!segmentsText.trim()) return null;
+  
+  const segments = segmentsText.split('|').map(s => s.trim()).filter(s => s);
+  const config = [];
+  
+  segments.forEach((seg, i) => {
+    const refColor = document.getElementById(`color-ref-${i}`)?.value || null;
+    config.push({
+      label: seg,
+      refColor: refColor
+    });
+  });
+  
+  return config.length > 0 ? JSON.stringify(config) : null;
 }
 
 // 处理音频上传

@@ -2927,3 +2927,145 @@ textarea {
     max-height: none;
   }
 }
+
+/* ============ 旋律线题样式 ============ */
+.melody-container {
+  padding: var(--space);
+}
+
+.melody-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space);
+  text-align: center;
+}
+
+.melody-canvas-wrapper {
+  width: 100%;
+  min-height: 200px;
+  background: #fafafa;
+  border: 2px solid var(--border-color);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: crosshair;
+}
+
+#melody-canvas {
+  display: block;
+  width: 100%;
+  height: 200px;
+}
+
+.melody-controls {
+  display: flex;
+  justify-content: center;
+  gap: var(--space);
+  margin-top: var(--space);
+}
+
+/* ============ 配色题样式 ============ */
+.color-container {
+  padding: var(--space);
+}
+
+.color-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space);
+  text-align: center;
+}
+
+.color-segments {
+  margin-bottom: var(--space-lg);
+}
+
+.color-segment-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.color-segment-item:last-child {
+  border-bottom: none;
+}
+
+.segment-label {
+  min-width: 100px;
+  font-size: 14px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.segment-color-slot {
+  flex: 1;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: var(--space-sm);
+}
+
+.segment-color-slot:hover {
+  border-color: var(--primary-color);
+  background: var(--primary-bg);
+}
+
+.segment-color-slot.selected {
+  border-style: solid;
+  border-color: transparent;
+}
+
+.segment-color-slot .placeholder {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.color-palette {
+  background: var(--bg-light);
+  padding: var(--space);
+  border-radius: var(--radius);
+}
+
+.color-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.color-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-sm);
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 60px;
+}
+
+.color-option:hover {
+  background: var(--bg-white);
+  border-color: var(--primary-light);
+}
+
+.color-option.active {
+  background: var(--primary-bg);
+  border-color: var(--primary-color);
+}
+
+.color-emoji {
+  font-size: 24px;
+  margin-bottom: 2px;
+}
+
+.color-name {
+  font-size: 11px;
+  color: var(--text-secondary);
+}

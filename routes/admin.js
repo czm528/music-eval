@@ -9,6 +9,8 @@ const router = express.Router();
 const { getDatabase } = require('../db/init');
 const keywordEval = require('../services/keyword-eval');
 const { updateCompetencyRecord, getClassroomStats } = require('../services/student-helper');
+const { evaluateMelody } = require('../services/melody-eval');
+const { evaluateColor } = require('../services/color-eval');
 
 // 中间件：检查管理员权限（支持session和token两种认证方式）
 function requireAdmin(req, res, next) {
@@ -575,7 +577,9 @@ router.post('/questions/:id/answers/import', async (req, res) => {
         // 评价答案
         let evaluation;
         
-        if (question.question_type === 'audio') {
+        const questionType = question.question_type || 'text';
+        
+        if (questionType === 'audio') {
           // 音标题：使用手动评分或默认值
           const score = item.score !== undefined ? item.score : 0;
           evaluation = {
@@ -584,6 +588,38 @@ router.post('/questions/:id/answers/import', async (req, res) => {
             comment: score > 0 ? `手动评分：${score}分` : '待教师评价',
             method: item.score !== undefined ? 'manual' : 'pending'
           };
+        } else if (questionType === 'melody') {
+          // 旋律线题
+          try {
+            const studentPoints = typeof item.content === 'string' ? JSON.parse(item.content) : item.content;
+            const refCurve = question.ref_curve ? JSON.parse(question.ref_curve) : null;
+            evaluation = evaluateMelody(studentPoints, refCurve);
+            evaluation.dimensions = { melody: evaluation.score };
+            evaluation.method = 'melody-comparison';
+          } catch (e) {
+            evaluation = {
+              dimensions: { melody: 0 },
+              totalScore: 0,
+              comment: '导入评分失败',
+              method: 'error'
+            };
+          }
+        } else if (questionType === 'color') {
+          // 配色题
+          try {
+            const studentSelections = typeof item.content === 'string' ? JSON.parse(item.content) : item.content;
+            const refConfig = question.ref_config ? JSON.parse(question.ref_config) : null;
+            evaluation = evaluateColor(studentSelections, refConfig);
+            evaluation.dimensions = { emotion: evaluation.score };
+            evaluation.method = 'color-matching';
+          } catch (e) {
+            evaluation = {
+              dimensions: { emotion: 0 },
+              totalScore: 0,
+              comment: '导入评分失败',
+              method: 'error'
+            };
+          }
         } else {
           // 文字题：使用关键词评价
           evaluation = keywordEval.evaluate(question.content, item.content, selectedDimensions);
@@ -712,7 +748,9 @@ router.post('/questions/:id/answers/single', async (req, res) => {
     // 评价答案
     let evaluation;
     
-    if (question.question_type === 'audio') {
+    const questionType = question.question_type || 'text';
+    
+    if (questionType === 'audio') {
       const pitchScore = score !== undefined ? score : 0;
       evaluation = {
         dimensions: { pitch: pitchScore },
@@ -720,6 +758,38 @@ router.post('/questions/:id/answers/single', async (req, res) => {
         comment: pitchScore > 0 ? `手动评分：${pitchScore}分` : '待教师评价',
         method: score !== undefined ? 'manual' : 'pending'
       };
+    } else if (questionType === 'melody') {
+      // 旋律线题
+      try {
+        const studentPoints = typeof content === 'string' ? JSON.parse(content) : content;
+        const refCurve = question.ref_curve ? JSON.parse(question.ref_curve) : null;
+        evaluation = evaluateMelody(studentPoints, refCurve);
+        evaluation.dimensions = { melody: evaluation.score };
+        evaluation.method = 'melody-comparison';
+      } catch (e) {
+        evaluation = {
+          dimensions: { melody: 0 },
+          totalScore: 0,
+          comment: '评分失败',
+          method: 'error'
+        };
+      }
+    } else if (questionType === 'color') {
+      // 配色题
+      try {
+        const studentSelections = typeof content === 'string' ? JSON.parse(content) : content;
+        const refConfig = question.ref_config ? JSON.parse(question.ref_config) : null;
+        evaluation = evaluateColor(studentSelections, refConfig);
+        evaluation.dimensions = { emotion: evaluation.score };
+        evaluation.method = 'color-matching';
+      } catch (e) {
+        evaluation = {
+          dimensions: { emotion: 0 },
+          totalScore: 0,
+          comment: '评分失败',
+          method: 'error'
+        };
+      }
     } else {
       evaluation = keywordEval.evaluate(question.content, content, selectedDimensions);
     }

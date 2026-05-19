@@ -289,6 +289,10 @@ function migrateDatabase() {
     { table: 'answers', column: 'pitch_score', type: 'REAL DEFAULT NULL' },
     { table: 'answers', column: 'pitch_deviation', type: 'REAL DEFAULT NULL' },
     { table: 'answers', column: 'pitch_curve', type: 'TEXT DEFAULT NULL' },
+    // 旋律线题和配色题新字段
+    { table: 'questions', column: 'lyrics_segments', type: 'TEXT DEFAULT NULL' },
+    { table: 'questions', column: 'ref_config', type: 'TEXT DEFAULT NULL' },
+    { table: 'questions', column: 'ref_curve', type: 'TEXT DEFAULT NULL' },
   ];
   
   for (const m of migrations) {

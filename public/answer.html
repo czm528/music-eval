@@ -90,6 +90,78 @@
               </button>
             </div>
           </div>
+          
+          <!-- 旋律线答题模式 -->
+          <div id="melody-answer-area" style="display: none;">
+            <div class="melody-container">
+              <p class="melody-hint">👆 在下方画布上绘制旋律线，从左侧起点开始，点击添加控制点</p>
+              <div class="melody-canvas-wrapper" id="melody-canvas-wrapper">
+                <canvas id="melody-canvas"></canvas>
+              </div>
+              <div class="melody-controls">
+                <button class="btn btn-sm" onclick="undoMelodyPoint()">↩️ 撤销</button>
+                <button class="btn btn-sm" onclick="clearMelodyCanvas()">🗑️ 清除</button>
+              </div>
+              <!-- 参考旋律播放（旋律线题也有参考音频） -->
+              <div class="reference-audio-section" id="melody-reference-audio-section" style="display: none; margin-top: 12px;">
+                <h4>🎵 参考旋律</h4>
+                <audio id="melody-reference-audio-player" controls style="width: 100%;"></audio>
+              </div>
+              <button class="btn btn-primary btn-block btn-lg" id="submit-melody-btn" onclick="submitMelodyAnswer()">
+                提交旋律线
+              </button>
+            </div>
+          </div>
+          
+          <!-- 配色答题模式 -->
+          <div id="color-answer-area" style="display: none;">
+            <div class="color-container">
+              <p class="color-hint">🎨 请为每句歌词选择合适的情绪颜色</p>
+              <div class="color-segments" id="color-segments-container">
+                <!-- 由JS动态生成 -->
+              </div>
+              <div class="color-palette">
+                <p style="font-size:12px;color:#888;margin-bottom:8px;">情绪色卡：</p>
+                <div class="color-options">
+                  <div class="color-option" data-color="red" onclick="selectColor(this)">
+                    <span class="color-emoji">🔴</span>
+                    <span class="color-name">激昂</span>
+                  </div>
+                  <div class="color-option" data-color="orange" onclick="selectColor(this)">
+                    <span class="color-emoji">🟠</span>
+                    <span class="color-name">温暖</span>
+                  </div>
+                  <div class="color-option" data-color="yellow" onclick="selectColor(this)">
+                    <span class="color-emoji">🟡</span>
+                    <span class="color-name">欢快</span>
+                  </div>
+                  <div class="color-option" data-color="green" onclick="selectColor(this)">
+                    <span class="color-emoji">🟢</span>
+                    <span class="color-name">宁静</span>
+                  </div>
+                  <div class="color-option" data-color="blue" onclick="selectColor(this)">
+                    <span class="color-emoji">🔵</span>
+                    <span class="color-name">忧伤</span>
+                  </div>
+                  <div class="color-option" data-color="purple" onclick="selectColor(this)">
+                    <span class="color-emoji">🟣</span>
+                    <span class="color-name">神秘</span>
+                  </div>
+                  <div class="color-option" data-color="white" onclick="selectColor(this)">
+                    <span class="color-emoji">⚪</span>
+                    <span class="color-name">空灵</span>
+                  </div>
+                  <div class="color-option" data-color="brown" onclick="selectColor(this)">
+                    <span class="color-emoji">🟤</span>
+                    <span class="color-name">沉稳</span>
+                  </div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-block btn-lg" id="submit-color-btn" onclick="submitColorAnswer()">
+                提交配色
+              </button>
+            </div>
+          </div>
         </div>
         
         <!-- 已回答时显示结果 -->

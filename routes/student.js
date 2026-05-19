@@ -10,6 +10,8 @@ const { getDatabase } = require('../db/init');
 const { evaluateWithAI } = require('../services/ai-eval');
 const keywordEval = require('../services/keyword-eval');
 const { analyzePitch } = require('../services/pitchAnalyzer');
+const { evaluateMelody } = require('../services/melody-eval');
+const { evaluateColor } = require('../services/color-eval');
 
 // 中间件：检查学生权限（支持session和token两种认证方式）
 function requireStudent(req, res, next) {
@@ -187,7 +189,7 @@ router.get('/classroom/:sessionId', (req, res) => {
 
 // ============ 提交回答 ============
 
-// 提交回答
+// 提交回答（支持文字题、旋律线题、配色题）
 router.post('/answers', async (req, res) => {
   const { questionId, content } = req.body;
   const user = req.sessionUser || req.session.user;
@@ -232,17 +234,56 @@ router.post('/answers', async (req, res) => {
     
     // 进行评价
     let evaluation = null;
+    const questionType = question.question_type || 'text';
     
-    // 优先尝试AI评价
-    try {
-      evaluation = await evaluateWithAI(question.content, content, student.name, selectedDimensions);
-    } catch (e) {
-      console.log('AI评价失败，使用关键词评价:', e.message);
-    }
-    
-    // 如果AI评价失败，使用关键词评价
-    if (!evaluation) {
-      evaluation = keywordEval.evaluate(question.content, content, selectedDimensions);
+    // 根据题目类型处理评价
+    if (questionType === 'melody') {
+      // 旋律线题评价
+      try {
+        const studentPoints = typeof content === 'string' ? JSON.parse(content) : content;
+        const refCurve = question.ref_curve ? JSON.parse(question.ref_curve) : null;
+        evaluation = evaluateMelody(studentPoints, refCurve);
+        evaluation.dimensions = { melody: evaluation.score };
+        evaluation.method = 'melody-comparison';
+      } catch (e) {
+        console.error('旋律线评分失败:', e);
+        evaluation = {
+          dimensions: { melody: 0 },
+          totalScore: 0,
+          comment: '评分失败，请重新提交',
+          method: 'error'
+        };
+      }
+    } else if (questionType === 'color') {
+      // 配色题评价
+      try {
+        const studentSelections = typeof content === 'string' ? JSON.parse(content) : content;
+        const refConfig = question.ref_config ? JSON.parse(question.ref_config) : null;
+        evaluation = evaluateColor(studentSelections, refConfig);
+        evaluation.dimensions = { emotion: evaluation.score };
+        evaluation.method = 'color-matching';
+      } catch (e) {
+        console.error('配色评分失败:', e);
+        evaluation = {
+          dimensions: { emotion: 0 },
+          totalScore: 0,
+          comment: '评分失败，请重新提交',
+          method: 'error'
+        };
+      }
+    } else {
+      // 文字题和音频题使用原有逻辑
+      // 优先尝试AI评价
+      try {
+        evaluation = await evaluateWithAI(question.content, content, student.name, selectedDimensions);
+      } catch (e) {
+        console.log('AI评价失败，使用关键词评价:', e.message);
+      }
+      
+      // 如果AI评价失败，使用关键词评价
+      if (!evaluation) {
+        evaluation = keywordEval.evaluate(question.content, content, selectedDimensions);
+      }
     }
     
     // 保存回答（如已有则更新）
@@ -253,7 +294,7 @@ router.post('/answers', async (req, res) => {
           comment = ?, eval_method = ?, evaluated_at = CURRENT_TIMESTAMP
         WHERE question_id = ? AND student_id = ?
       `).run(
-        content,
+        typeof content === 'object' ? JSON.stringify(content) : content,
         JSON.stringify(evaluation),
         JSON.stringify(evaluation.dimensions),
         evaluation.totalScore,
@@ -269,7 +310,7 @@ router.post('/answers', async (req, res) => {
       `).run(
         questionId,
         user.id,
-        content,
+        typeof content === 'object' ? JSON.stringify(content) : content,
         JSON.stringify(evaluation),
         JSON.stringify(evaluation.dimensions),
         evaluation.totalScore,
@@ -309,7 +350,8 @@ router.post('/answers', async (req, res) => {
         dimensionDetails: evaluation.dimensionDetails,
         comment: evaluation.comment,
         highlights: evaluation.highlights,
-        suggestions: evaluation.suggestions
+        suggestions: evaluation.suggestions,
+        questionType
       }
     });
   } catch (error) {
